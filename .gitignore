@@ -1,0 +1,12 @@
+output/*
+!output/.gitkeep
+data/activity_log.json
+*.pdf
+__pycache__/
+.venv/
+venv/
+.env
+*.pyc
+.streamlit/secrets.toml
+.DS_Store
+Thumbs.db
