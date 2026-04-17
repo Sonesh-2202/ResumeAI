@@ -3,7 +3,9 @@ LM Studio OpenAI-compatible API: connection checks, model discovery, and JSON LL
 """
 
 import json
+import os
 import re
+import time
 from typing import Any, Callable, Optional
 
 from openai import APIConnectionError, APITimeoutError, OpenAI
@@ -14,8 +16,10 @@ from utils.prompt_builder import (
     system_json_only,
 )
 
-LM_STUDIO_BASE_URL = "http://localhost:1234/v1"
-LM_STUDIO_API_KEY = "lm-studio"
+LM_STUDIO_BASE_URL = os.getenv("LM_STUDIO_BASE_URL", "http://localhost:1234/v1")
+LM_STUDIO_API_KEY = os.getenv("LM_STUDIO_API_KEY", "lm-studio")
+DEFAULT_TIMEOUT_SECONDS = 180.0
+DEFAULT_MAX_RETRIES = 2
 
 CONNECTION_ERROR_MESSAGE = (
     "LM Studio is not running. Please open LM Studio, load a model, "
@@ -23,7 +27,20 @@ CONNECTION_ERROR_MESSAGE = (
 )
 
 
-def create_lm_studio_client() -> OpenAI:
+def _normalize_base_url(base_url: str) -> str:
+    """Ensure the LM Studio endpoint ends at /v1 without duplicate slashes."""
+    cleaned = (base_url or LM_STUDIO_BASE_URL).strip().rstrip("/")
+    if not cleaned.endswith("/v1"):
+        cleaned = cleaned + "/v1"
+    return cleaned
+
+
+def create_lm_studio_client(
+    base_url: str = LM_STUDIO_BASE_URL,
+    api_key: str = LM_STUDIO_API_KEY,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+) -> OpenAI:
     """
     Create an OpenAI client pointed at the local LM Studio server.
 
@@ -31,10 +48,10 @@ def create_lm_studio_client() -> OpenAI:
         Configured OpenAI client instance.
     """
     return OpenAI(
-        base_url=LM_STUDIO_BASE_URL,
-        api_key=LM_STUDIO_API_KEY,
-        timeout=180.0,
-        max_retries=1,
+        base_url=_normalize_base_url(base_url),
+        api_key=api_key or LM_STUDIO_API_KEY,
+        timeout=timeout,
+        max_retries=max_retries,
     )
 
 
@@ -114,6 +131,8 @@ def chat_completion_content(
     messages: list[dict[str, str]],
     temperature: float,
     max_tokens: int,
+    stream: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> str:
     """
     Run a chat completion and return the assistant message content.
@@ -131,6 +150,27 @@ def chat_completion_content(
     Raises:
         Exception: On API or network errors.
     """
+    if stream:
+        chunks: list[str] = []
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        for part in response:
+            try:
+                delta = part.choices[0].delta if part.choices else None
+                content = getattr(delta, "content", None) if delta else None
+            except Exception:
+                content = None
+            if content:
+                chunks.append(str(content))
+                if on_chunk:
+                    on_chunk("".join(chunks))
+        return "".join(chunks).strip()
+
     resp = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -165,20 +205,52 @@ def extract_json_object(text: str) -> dict[str, Any]:
         s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
         s = re.sub(r"\s*```$", "", s)
         s = s.strip()
-    start = s.find("{")
-    end = s.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No JSON object boundaries found")
-    chunk = s[start : end + 1]
-    return json.loads(chunk)
+    start = -1
+    depth = 0
+    in_string = False
+    escape = False
+    for idx, ch in enumerate(s):
+        if start == -1:
+            if ch == "{":
+                start = idx
+                depth = 1
+            continue
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return json.loads(s[start : idx + 1])
+    raise ValueError("No balanced JSON object found")
 
 
 def _normalize_hire_recommendation(val: Any) -> str:
-    """Map recommendation to Hire, Maybe, or Reject."""
+    """Map recommendation to Strong Yes, Yes, Maybe, or No."""
     if val is None:
         return "Maybe"
     t = str(val).strip()
-    for opt in ("Hire", "Maybe", "Reject"):
+    mapping = {
+        "strong yes": "Strong Yes",
+        "yes": "Yes",
+        "maybe": "Maybe",
+        "no": "No",
+        "hire": "Yes",
+        "reject": "No",
+    }
+    normalized = mapping.get(t.lower())
+    if normalized:
+        return normalized
+    for opt in ("Strong Yes", "Yes", "Maybe", "No"):
         if t.lower() == opt.lower():
             return opt
     return "Maybe"
@@ -209,9 +281,43 @@ def normalize_hr_score_dict(data: dict[str, Any], fallback_name: str) -> dict[st
         name = fallback_name
 
     strengths = data.get("strengths") or []
-    weaknesses = data.get("weaknesses") or []
+    gaps = data.get("gaps") or data.get("weaknesses") or []
     missing = data.get("missing_skills") or []
     keywords = data.get("keyword_matches") or []
+
+    def as_score_map(val: Any) -> dict[str, float]:
+        if not isinstance(val, dict):
+            return {}
+        out: dict[str, float] = {}
+        for key, item in val.items():
+            if key is None:
+                continue
+            try:
+                score = float(item)
+            except (TypeError, ValueError):
+                continue
+            out[str(key).strip()] = float(max(0.0, min(10.0, score)))
+        return out
+
+    score_breakdown = as_score_map(data.get("score_breakdown") or data.get("dimensions"))
+    overall = data.get("overall_score")
+    if overall is None:
+        overall = data.get("llm_score")
+    if overall is None and score_breakdown:
+        weights = {
+            "skills_match": 0.30,
+            "experience_relevance": 0.25,
+            "achievement_quality": 0.20,
+            "education_fit": 0.10,
+            "cultural_alignment": 0.15,
+        }
+        weighted = 0.0
+        total_weight = 0.0
+        for key, weight in weights.items():
+            if key in score_breakdown:
+                weighted += score_breakdown[key] * weight
+                total_weight += weight
+        overall = weighted / total_weight if total_weight else 0.0
 
     def as_str_list(x: Any) -> list[str]:
         if not isinstance(x, list):
@@ -220,14 +326,23 @@ def normalize_hr_score_dict(data: dict[str, Any], fallback_name: str) -> dict[st
 
     return {
         "candidate_name": str(name).strip(),
-        "llm_score": _coerce_llm_score(data.get("llm_score")),
+        "llm_score": _coerce_llm_score(overall),
+        "score_breakdown": score_breakdown,
         "strengths": as_str_list(strengths),
-        "weaknesses": as_str_list(weaknesses),
+        "weaknesses": as_str_list(gaps),
+        "gaps": as_str_list(gaps),
         "missing_skills": as_str_list(missing),
         "keyword_matches": as_str_list(keywords),
         "recommendation": _normalize_hire_recommendation(data.get("recommendation")),
         "summary": str(data.get("summary") or "").strip() or "No summary provided.",
     }
+
+
+def _sleep_backoff(attempt_index: int, base_delay: float) -> None:
+    """Sleep using an exponential backoff curve."""
+    delay = max(0.0, base_delay) * (2 ** max(0, attempt_index))
+    if delay > 0:
+        time.sleep(delay)
 
 
 def score_candidate_resume(
@@ -236,6 +351,8 @@ def score_candidate_resume(
     job_description: str,
     resume_text: str,
     candidate_label: str,
+    stream: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> dict[str, Any]:
     """
     Run Stage-2 LLM scoring for one candidate with one retry on bad JSON.
@@ -252,40 +369,35 @@ def score_candidate_resume(
     """
     system = system_json_only("technical recruiter and hiring manager")
     user = hr_scoring_user_prompt(job_description, resume_text, candidate_label)
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user},
-    ]
-    raw = ""
-    try:
-        raw = chat_completion_content(
-            client, model, messages, temperature=0.3, max_tokens=2000
-        )
-        data = extract_json_object(raw)
-        return normalize_hr_score_dict(data, candidate_label)
-    except Exception:
-        pass
-
-    try:
-        retry_user = hr_scoring_retry_user_prompt(
-            job_description, resume_text, candidate_label, raw
-        )
-        messages_retry = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": retry_user},
-        ]
-        raw2 = chat_completion_content(
-            client, model, messages_retry, temperature=0.2, max_tokens=2000
-        )
-        data2 = extract_json_object(raw2)
-        return normalize_hr_score_dict(data2, candidate_label)
-    except Exception:
+    result = run_json_prompt_with_retry(
+        client,
+        model,
+        system,
+        user,
+        lambda prev: hr_scoring_retry_user_prompt(
+            job_description, resume_text, candidate_label, prev
+        ),
+        temperature=0.25,
+        max_tokens=2400,
+        stream=stream,
+        on_chunk=on_chunk,
+        max_attempts=3,
+        base_delay=0.75,
+    )
+    if result.get("_parse_error"):
         return normalize_hr_score_dict(
             {
                 "candidate_name": candidate_label,
-                "llm_score": 0.0,
+                "overall_score": 0.0,
+                "score_breakdown": {
+                    "skills_match": 0.0,
+                    "experience_relevance": 0.0,
+                    "achievement_quality": 0.0,
+                    "education_fit": 0.0,
+                    "cultural_alignment": 0.0,
+                },
                 "strengths": [],
-                "weaknesses": ["LLM output could not be parsed as JSON."],
+                "gaps": ["LLM output could not be parsed as JSON."],
                 "missing_skills": [],
                 "keyword_matches": [],
                 "recommendation": "Maybe",
@@ -293,6 +405,7 @@ def score_candidate_resume(
             },
             candidate_label,
         )
+    return normalize_hr_score_dict(result, candidate_label)
 
 
 def run_json_prompt_once(
@@ -302,6 +415,8 @@ def run_json_prompt_once(
     user_prompt: str,
     temperature: float,
     max_tokens: int,
+    stream: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
 ) -> dict[str, Any]:
     """
     Single chat completion parsed as JSON object.
@@ -330,6 +445,8 @@ def run_json_prompt_once(
         ],
         temperature=temperature,
         max_tokens=max_tokens,
+        stream=stream,
+        on_chunk=on_chunk,
     )
     return extract_json_object(content)
 
@@ -342,6 +459,10 @@ def run_json_prompt_with_retry(
     user_prompt_retry: Callable[[str], str],
     temperature: float,
     max_tokens: int,
+    stream: bool = False,
+    on_chunk: Optional[Callable[[str], None]] = None,
+    max_attempts: int = 3,
+    base_delay: float = 0.75,
 ) -> dict[str, Any]:
     """
     Run JSON prompt; on parse failure, build retry user prompt from raw output and try again.
@@ -358,33 +479,29 @@ def run_json_prompt_with_retry(
     Returns:
         Parsed dict, or minimal error dict if both attempts fail.
     """
-    raw = ""
-    try:
-        raw = chat_completion_content(
-            client,
-            model,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return extract_json_object(raw)
-    except Exception:
-        pass
-    try:
-        retry_u = user_prompt_retry(raw)
-        raw2 = chat_completion_content(
-            client,
-            model,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": retry_u},
-            ],
-            temperature=max(0.1, temperature - 0.1),
-            max_tokens=max_tokens,
-        )
-        return extract_json_object(raw2)
-    except Exception:
-        return {"_parse_error": True, "_raw": (raw or "")[:500]}
+    last_raw = ""
+    attempts = max(1, int(max_attempts))
+    for attempt in range(attempts):
+        try:
+            last_raw = chat_completion_content(
+                client,
+                model,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt if attempt == 0 else user_prompt_retry(last_raw)},
+                ],
+                temperature=max(0.1, temperature - (0.05 * attempt)),
+                max_tokens=max_tokens,
+                stream=stream,
+                on_chunk=on_chunk,
+            )
+            return extract_json_object(last_raw)
+        except (APIConnectionError, APITimeoutError, TimeoutError):
+            if attempt >= attempts - 1:
+                break
+            _sleep_backoff(attempt, base_delay)
+        except Exception:
+            if attempt >= attempts - 1:
+                break
+            _sleep_backoff(attempt, base_delay)
+    return {"_parse_error": True, "_raw": (last_raw or "")[:500], "_attempts": attempts}

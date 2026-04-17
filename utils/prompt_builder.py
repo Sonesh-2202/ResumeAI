@@ -33,7 +33,7 @@ def system_json_only(role: str) -> str:
     return (
         f"You are an expert {role}. You must respond ONLY with valid JSON. "
         "No markdown code blocks, no explanation, no preamble. "
-        "Start your response with {{ and end with }}."
+        "Start your response with { and end with }."
     )
 
 
@@ -64,18 +64,39 @@ def hr_scoring_user_prompt(
 
     schema = {
         "candidate_name": "string",
-        "llm_score": "float between 0 and 10",
+        "overall_score": "float between 0 and 10",
+        "score_breakdown": {
+            "skills_match": "float between 0 and 10",
+            "experience_relevance": "float between 0 and 10",
+            "achievement_quality": "float between 0 and 10",
+            "education_fit": "float between 0 and 10",
+            "cultural_alignment": "float between 0 and 10",
+        },
         "strengths": ["string"],
-        "weaknesses": ["string"],
+        "gaps": ["string"],
         "missing_skills": ["string"],
         "keyword_matches": ["string"],
-        "recommendation": "Hire | Maybe | Reject",
+        "recommendation": "Strong Yes | Yes | Maybe | No",
         "summary": "2-3 sentence explanation",
     }
 
     return f"""You are evaluating one candidate resume against one job description.
 
 Candidate label (use as candidate_name if the resume does not state a clear name): {candidate_label}
+
+Weighted rubric:
+- Skills match: 30%
+- Experience relevance and seniority: 25%
+- Achievement quality and quantified impact: 20%
+- Education fit: 10%
+- Cultural/role alignment: 15%
+
+Scoring rules:
+- Give a separate 0-10 score for every rubric dimension.
+- Use only evidence explicitly supported by the resume or job description.
+- Prefer quantified achievements and role-specific keywords when scoring highly.
+- If the resume lacks evidence for a dimension, score it conservatively.
+- Recommendation must be one of: "Strong Yes", "Yes", "Maybe", "No".
 
 Job description:
 ---
@@ -88,13 +109,8 @@ Resume:
 ---
 {notes}
 
-Instructions:
-- Compare the resume to the job description rigorously.
-- Ground strengths, weaknesses, missing_skills, and keyword_matches in concrete wording from the resume or JD — do not invent experience the resume does not support.
-- Assign llm_score from 0 (no fit) to 10 (excellent fit).
-- recommendation must be exactly one of: "Hire", "Maybe", "Reject".
-- Respond ONLY with JSON, starting with {{ and ending with }}.
-- Do not include markdown, code fences, or any text outside the JSON object.
+Respond ONLY with JSON, starting with {{ and ending with }}.
+Do not include markdown, code fences, or any text outside the JSON object.
 
 Exact JSON schema (types and keys required):
 {json.dumps(schema, indent=2)}
@@ -125,7 +141,7 @@ def hr_scoring_retry_user_prompt(
         base
         + "\n\nYour previous answer was invalid JSON. Output again as a single JSON object only.\n"
         f"Invalid prior output (for reference, do not repeat): {prev}\n"
-        "Remember: respond ONLY with JSON starting with {{ — no markdown."
+        "Remember: respond ONLY with JSON starting with { — no markdown."
     )
 
 
@@ -155,7 +171,7 @@ def jd_analysis_user_prompt(combined_jd_text: str) -> str:
     }
 
     return f"""Analyze ALL of the following job descriptions together. They may be for similar roles.
-Identify patterns across them: shared skills, keywords, responsibilities, tone, and seniority.{note}
+Identify patterns across them: shared skills, keywords, responsibilities, tone, seniority, and role family.{note}
 
 Combined job descriptions:
 ---
@@ -197,15 +213,16 @@ def resume_generation_user_prompt(
             "linkedin": "",
             "github": "",
         },
-        "summary": "3-4 sentence professional summary targeting these roles",
+        "summary": "2-3 line professional summary tailored to the target roles",
+        "headline": "short role-aligned title or value proposition",
         "skills": {
-            "technical": ["string"],
+            "languages": ["string"],
+            "frameworks": ["string"],
             "tools": ["string"],
+            "platforms": ["string"],
+            "databases": ["string"],
             "soft_skills": ["string"],
         },
-        "education": [
-            {"degree": "", "institution": "", "year": "", "cgpa": ""},
-        ],
         "experience": [
             {
                 "company": "",
@@ -221,28 +238,34 @@ def resume_generation_user_prompt(
                 "points": ["string"],
             },
         ],
+        "education": [
+            {"degree": "", "institution": "", "year": "", "cgpa": ""},
+        ],
         "certifications": ["string"],
         "achievements": ["string"],
     }
 
     return f"""You are writing an ATS-friendly resume for a real person.
 
-Job market analysis (JSON):
+Target-role analysis (JSON):
 {jd_json}
 
 Ideal candidate profile (synthesis for tone and emphasis):
 {target_profile_text}
 
+Resume quality rules to follow:
+- Use a clean ATS-first structure: Summary -> Experience -> Skills -> Education -> Projects -> Certifications -> Achievements.
+- Write bullets that start with strong action verbs such as Led, Architected, Built, Shipped, Optimized, Drove, Designed, Delivered, Automated, Reduced, Improved.
+- Prefer quantified outcomes and concrete scope when the user has provided numbers, percentages, latency, scale, revenue, time saved, or error reductions.
+- Use STAR-style framing in bullets: concise situation/task, action, then result.
+- Never invent metrics, employers, dates, titles, or projects that the user did not provide.
+- If no metric exists, keep the bullet impact-oriented without fabricating a number.
+- Tailor emphasis to the target roles, industry, tone, and recurring keywords from the analysis.
+- Keep language crisp, professional, and recruiter-friendly. Avoid filler phrases such as responsible for, worked with, helped with, or involved in.
+- Keep the skills section categorized instead of a flat list.
+
 User's REAL details (JSON — only use facts from here; do not invent employers, degrees, skills, or projects they did not provide):
 {user_json}
-
-Strict rules:
-- DO NOT fabricate any skills, experiences, employers, dates, or projects the user has not mentioned.
-- DO rephrase and reframe their real experience using keywords, action verbs, and technical language from the analysis.
-- Prioritize must_have_skills and common_keywords from the analysis when ordering and wording bullets.
-- Use strong action verbs: Designed, Implemented, Architected, Developed, Led, Delivered, etc.
-- Frame projects and work to highlight business and technical impact using only supported facts.
-- Match the tone from analysis (formal, technical, startup, or corporate).
 
 Output the resume as structured JSON only. Respond ONLY with JSON starting with {{ and ending with }}.
 No markdown, no code fences.

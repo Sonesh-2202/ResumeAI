@@ -4,11 +4,11 @@ LLM-powered resume JSON generation and ReportLab PDF rendering.
 
 import os
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 from xml.sax.saxutils import escape
 
-from reportlab.lib.enums import TA_LEFT
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -29,14 +29,32 @@ def _default_resume(name: str) -> dict[str, Any]:
             "linkedin": "",
             "github": "",
         },
+        "headline": "",
         "summary": "",
-        "skills": {"technical": [], "tools": [], "soft_skills": []},
+        "skills": {
+            "languages": [],
+            "frameworks": [],
+            "tools": [],
+            "platforms": [],
+            "databases": [],
+            "soft_skills": [],
+            "technical": [],
+        },
         "education": [],
         "experience": [],
         "projects": [],
         "certifications": [],
         "achievements": [],
     }
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if item is not None and str(item).strip()]
+    if value is None:
+        return []
+    text = str(value).strip()
+    return [text] if text else []
 
 
 def normalize_resume_json(data: Any, fallback_name: str) -> dict[str, Any]:
@@ -55,6 +73,7 @@ def normalize_resume_json(data: Any, fallback_name: str) -> dict[str, Any]:
         return out
 
     out["name"] = str(data.get("name") or fallback_name).strip() or fallback_name
+    out["headline"] = str(data.get("headline") or "").strip()
     c = data.get("contact") if isinstance(data.get("contact"), dict) else {}
     out["contact"] = {
         "email": str(c.get("email") or "").strip(),
@@ -64,12 +83,17 @@ def normalize_resume_json(data: Any, fallback_name: str) -> dict[str, Any]:
     }
     out["summary"] = str(data.get("summary") or "").strip()
 
-    sk = data.get("skills") if isinstance(data.get("skills"), dict) else {}
-    out["skills"] = {
-        "technical": [str(x) for x in (sk.get("technical") or []) if x],
-        "tools": [str(x) for x in (sk.get("tools") or []) if x],
-        "soft_skills": [str(x) for x in (sk.get("soft_skills") or []) if x],
+    skills_raw = data.get("skills") if isinstance(data.get("skills"), dict) else {}
+    skills = {
+        "languages": _as_str_list(skills_raw.get("languages")),
+        "frameworks": _as_str_list(skills_raw.get("frameworks")),
+        "tools": _as_str_list(skills_raw.get("tools")),
+        "platforms": _as_str_list(skills_raw.get("platforms")),
+        "databases": _as_str_list(skills_raw.get("databases")),
+        "soft_skills": _as_str_list(skills_raw.get("soft_skills")),
+        "technical": _as_str_list(skills_raw.get("technical")),
     }
+    out["skills"] = skills
 
     edu = data.get("education") or []
     if isinstance(edu, list):
@@ -89,14 +113,12 @@ def normalize_resume_json(data: Any, fallback_name: str) -> dict[str, Any]:
         for e in exp:
             if isinstance(e, dict):
                 pts = e.get("points") or []
-                if not isinstance(pts, list):
-                    pts = []
                 out["experience"].append(
                     {
                         "company": str(e.get("company") or ""),
                         "role": str(e.get("role") or ""),
                         "duration": str(e.get("duration") or ""),
-                        "points": [str(p) for p in pts if p],
+                        "points": _as_str_list(pts),
                     }
                 )
 
@@ -104,22 +126,16 @@ def normalize_resume_json(data: Any, fallback_name: str) -> dict[str, Any]:
     if isinstance(proj, list):
         for p in proj:
             if isinstance(p, dict):
-                pts = p.get("points") or []
-                if not isinstance(pts, list):
-                    pts = []
                 out["projects"].append(
                     {
                         "name": str(p.get("name") or ""),
                         "tech_stack": str(p.get("tech_stack") or ""),
-                        "points": [str(x) for x in pts if x],
+                        "points": _as_str_list(p.get("points") or []),
                     }
                 )
 
-    cert = data.get("certifications") or []
-    out["certifications"] = [str(x) for x in cert if x] if isinstance(cert, list) else []
-
-    ach = data.get("achievements") or []
-    out["achievements"] = [str(x) for x in ach if x] if isinstance(ach, list) else []
+    out["certifications"] = _as_str_list(data.get("certifications") or [])
+    out["achievements"] = _as_str_list(data.get("achievements") or [])
 
     return out
 
@@ -130,6 +146,8 @@ def generate_resume_json(
     jd_analysis: dict[str, Any],
     user_details: dict[str, Any],
     user_display_name: str,
+    stream: bool = False,
+    on_chunk: Any = None,
 ) -> dict[str, Any]:
     """
     Call LM Studio to produce tailored resume JSON from analysis and user facts.
@@ -164,8 +182,12 @@ def generate_resume_json(
         system,
         user,
         retry_user,
-        temperature=0.7,
+        temperature=0.6,
         max_tokens=4000,
+        stream=stream,
+        on_chunk=on_chunk,
+        max_attempts=3,
+        base_delay=0.75,
     )
     if result.get("_parse_error"):
         return normalize_resume_json({}, user_display_name)
@@ -176,6 +198,24 @@ def _p(text: str, style: ParagraphStyle) -> Paragraph:
     """Build a Paragraph with XML-escaped text."""
     safe = escape(str(text or "")).replace("\n", "<br/>")
     return Paragraph(safe, style)
+
+
+def _skill_rows(skills: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    rows: list[tuple[str, list[str]]] = []
+    labels = [
+        ("Languages", "languages"),
+        ("Frameworks", "frameworks"),
+        ("Tools", "tools"),
+        ("Platforms", "platforms"),
+        ("Databases", "databases"),
+        ("Soft skills", "soft_skills"),
+        ("Technical", "technical"),
+    ]
+    for label, key in labels:
+        vals = skills.get(key) or []
+        if vals:
+            rows.append((label, [str(v) for v in vals if str(v).strip()]))
+    return rows
 
 
 def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
@@ -193,7 +233,7 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(output_dir, f"my_resume_{ts}.pdf")
 
-    margin = 0.75 * inch
+    margin = 0.72 * inch
     doc = SimpleDocTemplate(
         path,
         pagesize=letter,
@@ -210,9 +250,10 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
         parent=styles["Normal"],
         fontName="Helvetica",
         fontSize=10,
-        leading=12,
+        leading=13,
         alignment=TA_LEFT,
         spaceAfter=4,
+        textColor=colors.HexColor("#111827"),
     )
     bullet = ParagraphStyle(
         "Bullet",
@@ -220,16 +261,17 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
         leftIndent=12,
         bulletIndent=6,
         bulletFontName="Helvetica",
+        spaceAfter=3,
     )
     section = ParagraphStyle(
         "Section",
         parent=styles["Heading2"],
         fontName="Helvetica-Bold",
-        fontSize=12,
-        leading=14,
+        fontSize=11,
+        leading=13,
         spaceBefore=10,
-        spaceAfter=6,
-        textColor="black",
+        spaceAfter=5,
+        textColor=colors.HexColor("#0f172a"),
     )
     name_style = ParagraphStyle(
         "Name",
@@ -238,11 +280,24 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
         fontSize=16,
         leading=18,
         alignment=TA_LEFT,
-        spaceAfter=6,
+        spaceAfter=2,
+        textColor=colors.HexColor("#0f172a"),
+    )
+    headline_style = ParagraphStyle(
+        "Headline",
+        parent=body,
+        fontName="Helvetica-BoldOblique",
+        fontSize=10,
+        leading=12,
+        spaceAfter=4,
+        textColor=colors.HexColor("#334155"),
     )
 
     story: list[Any] = []
     story.append(_p(resume.get("name") or "Candidate", name_style))
+    headline = str(resume.get("headline") or "").strip()
+    if headline:
+        story.append(_p(headline, headline_style))
 
     c = resume.get("contact") or {}
     contact_bits = [
@@ -254,7 +309,7 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
     contact_line = " | ".join(str(x).strip() for x in contact_bits if x and str(x).strip())
     if contact_line:
         story.append(_p(contact_line, body))
-    story.append(Spacer(1, 6))
+    story.append(Spacer(1, 5))
 
     usable_w = letter[0] - 2 * margin
 
@@ -263,9 +318,9 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
         story.append(
             HRFlowable(
                 width=usable_w,
-                thickness=0.5,
-                color=colors.black,
-                spaceAfter=8,
+                thickness=0.6,
+                color=colors.HexColor("#94a3b8"),
+                spaceAfter=7,
             )
         )
 
@@ -274,22 +329,28 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
         add_section("Professional Summary")
         story.append(_p(summ, body))
 
+    exp_list = resume.get("experience") or []
+    if exp_list:
+        add_section("Experience")
+        for e in exp_list:
+            header_bits = [
+                str(e.get("role") or "").strip(),
+                str(e.get("company") or "").strip(),
+                str(e.get("duration") or "").strip(),
+            ]
+            header = " | ".join(filter(None, header_bits))
+            if header:
+                story.append(Paragraph("<b>" + escape(header) + "</b>", body))
+            for pt in e.get("points") or []:
+                if str(pt).strip():
+                    story.append(Paragraph("• " + escape(str(pt).strip()), bullet))
+
     sk = resume.get("skills") or {}
-    tech = sk.get("technical") or []
-    tools = sk.get("tools") or []
-    soft = sk.get("soft_skills") or []
-    if tech or tools or soft:
+    skill_rows = _skill_rows(sk)
+    if skill_rows:
         add_section("Skills")
-        if tech:
-            story.append(
-                Paragraph("<b>Technical:</b> " + escape(", ".join(tech)), body)
-            )
-        if tools:
-            story.append(Paragraph("<b>Tools:</b> " + escape(", ".join(tools)), body))
-        if soft:
-            story.append(
-                Paragraph("<b>Soft skills:</b> " + escape(", ".join(soft)), body)
-            )
+        for label, values in skill_rows:
+            story.append(Paragraph(f"<b>{escape(label)}:</b> {escape(', '.join(values))}", body))
 
     edu_list = resume.get("education") or []
     if edu_list:
@@ -308,26 +369,6 @@ def render_resume_pdf(resume: dict[str, Any], output_dir: str) -> str:
             )
             if line:
                 story.append(Paragraph("• " + escape(line), bullet))
-
-    exp_list = resume.get("experience") or []
-    if exp_list:
-        add_section("Experience")
-        for e in exp_list:
-            header = " | ".join(
-                filter(
-                    None,
-                    [
-                        str(e.get("role") or "").strip(),
-                        str(e.get("company") or "").strip(),
-                        str(e.get("duration") or "").strip(),
-                    ],
-                )
-            )
-            if header:
-                story.append(Paragraph("<b>" + escape(header) + "</b>", body))
-            for pt in e.get("points") or []:
-                if str(pt).strip():
-                    story.append(Paragraph("• " + escape(str(pt).strip()), bullet))
 
     proj_list = resume.get("projects") or []
     if proj_list:
@@ -374,21 +415,30 @@ def resume_to_plain_text(resume: dict[str, Any]) -> str:
     n = str(resume.get("name") or "").strip()
     if n:
         lines.append(n)
+    headline = str(resume.get("headline") or "").strip()
+    if headline:
+        lines.append("Headline: " + headline)
     c = resume.get("contact") or {}
     bits = [c.get("email"), c.get("phone"), c.get("linkedin"), c.get("github")]
-    lines.append(" | ".join(str(x) for x in bits if x))
+    contact = " | ".join(str(x).strip() for x in bits if x and str(x).strip())
+    if contact:
+        lines.append(contact)
     summ = str(resume.get("summary") or "").strip()
     if summ:
         lines.append("Summary: " + summ)
     sk = resume.get("skills") or {}
     for label, key in (
-        ("Technical skills", "technical"),
+        ("Languages", "languages"),
+        ("Frameworks", "frameworks"),
         ("Tools", "tools"),
+        ("Platforms", "platforms"),
+        ("Databases", "databases"),
         ("Soft skills", "soft_skills"),
+        ("Technical skills", "technical"),
     ):
         vals = sk.get(key) or []
         if vals:
-            lines.append(f"{label}: " + ", ".join(str(v) for v in vals))
+            lines.append(f"{label}: " + ", ".join(str(v) for v in vals if str(v).strip()))
     for e in resume.get("education") or []:
         lines.append(
             "Education: "

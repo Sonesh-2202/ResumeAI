@@ -32,6 +32,7 @@ from utils.ui_theme import (
     mode_segmented_label,
     render_connection_status,
     render_hero,
+    render_loading_skeleton,
     render_sidebar_brand,
     render_theme_toggle,
     section_card,
@@ -43,6 +44,11 @@ OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 
 MIN_JD_CHARS = 80
 MIN_JD_WORDS = 25
+DEFAULT_LM_BASE_URL = "http://localhost:1234/v1"
+DEFAULT_LM_API_KEY = "lm-studio"
+DEFAULT_LM_TIMEOUT = 180.0
+DEFAULT_LM_MAX_RETRIES = 2
+MAX_PDF_BYTES = 20 * 1024 * 1024
 
 
 @st.cache_resource
@@ -57,7 +63,7 @@ def get_sentence_transformer():
 
 
 @st.cache_data(ttl=30)
-def cached_model_ids() -> tuple[str, ...]:
+def cached_model_ids(base_url: str) -> tuple[str, ...]:
     """
     Cache LM Studio model IDs briefly to avoid hammering /v1/models.
 
@@ -65,27 +71,93 @@ def cached_model_ids() -> tuple[str, ...]:
         Tuple of model id strings.
     """
     try:
-        return tuple(list_model_ids(None))
+        return tuple(list_model_ids(create_lm_studio_client(base_url=base_url)))
     except Exception:
         return ()
 
 
+def init_lm_session_defaults() -> None:
+    """Ensure LM Studio settings exist in session_state."""
+    st.session_state.setdefault("lm_base_url", DEFAULT_LM_BASE_URL)
+    st.session_state.setdefault("lm_api_key", DEFAULT_LM_API_KEY)
+    st.session_state.setdefault("lm_timeout", DEFAULT_LM_TIMEOUT)
+    st.session_state.setdefault("lm_max_retries", DEFAULT_LM_MAX_RETRIES)
+    st.session_state.setdefault("lm_model_override", "")
+
+
+def get_lm_settings() -> dict[str, Any]:
+    """Return the current LM Studio connection settings."""
+    init_lm_session_defaults()
+    return {
+        "base_url": str(st.session_state.get("lm_base_url") or DEFAULT_LM_BASE_URL).strip(),
+        "api_key": str(st.session_state.get("lm_api_key") or DEFAULT_LM_API_KEY).strip(),
+        "timeout": float(st.session_state.get("lm_timeout") or DEFAULT_LM_TIMEOUT),
+        "max_retries": int(st.session_state.get("lm_max_retries") or DEFAULT_LM_MAX_RETRIES),
+        "model_override": str(st.session_state.get("lm_model_override") or "").strip(),
+    }
+
+
+def build_lm_client() -> Any:
+    """Create a configured LM Studio client from current sidebar settings."""
+    settings = get_lm_settings()
+    return create_lm_studio_client(
+        base_url=settings["base_url"],
+        api_key=settings["api_key"],
+        timeout=settings["timeout"],
+        max_retries=settings["max_retries"],
+    )
+
+
+def resolve_active_model_id(client: Any, loaded_model_id: Optional[str]) -> str:
+    """Resolve the model id to use, preferring the manual override when present."""
+    settings = get_lm_settings()
+    override = settings["model_override"]
+    if override:
+        return override
+    if loaded_model_id:
+        return loaded_model_id
+    ids = list_model_ids(client)
+    return ids[0] if ids else ""
+
+
 def refresh_connection_state() -> None:
     """Update session_state with LM Studio connection info."""
-    client = create_lm_studio_client()
+    settings = get_lm_settings()
+    client = build_lm_client()
     ok, msg, mid = check_lm_studio_connection(client)
     st.session_state["lm_ok"] = ok
     st.session_state["lm_message"] = msg
     st.session_state["lm_model_id"] = mid
-    ids = list(cached_model_ids())
+    st.session_state["lm_loaded_model_id"] = mid
+    ids = list(cached_model_ids(settings["base_url"]))
     if not ids:
         try:
             ids = list_model_ids(client)
         except Exception:
             ids = []
     st.session_state["lm_all_models"] = ids
-    if mid is None and ids:
-        st.session_state["lm_model_id"] = ids[0]
+    resolved = resolve_active_model_id(client, mid)
+    if resolved:
+        st.session_state["lm_model_id"] = resolved
+
+
+def _split_multiblock_text(text: str) -> list[str]:
+    """Split pasted multi-document text using ---- separators."""
+    if not text or not str(text).strip():
+        return []
+    blocks = [chunk.strip() for chunk in str(text).split("\n----\n")]
+    return [chunk for chunk in blocks if chunk]
+
+
+def _pdf_too_large(uploaded_file: Any) -> bool:
+    """Return True when the uploaded PDF exceeds the supported size."""
+    size = getattr(uploaded_file, "size", None)
+    if size is None:
+        return False
+    try:
+        return int(size) > MAX_PDF_BYTES
+    except Exception:
+        return False
 
 
 def init_session_defaults() -> None:
@@ -120,16 +192,18 @@ def _style_by_recommendation(df: pd.DataFrame, dark: bool = False) -> Any:
     """Return a Styler coloring rows by Recommendation (theme-aware)."""
     if dark:
         colors_map = {
-            "Hire": "#064e3b",
+            "Strong Yes": "#064e3b",
+            "Yes": "#14532d",
             "Maybe": "#713f12",
-            "Reject": "#7f1d1d",
+            "No": "#7f1d1d",
         }
         default_bg = "#1e1e2e"
     else:
         colors_map = {
-            "Hire": "#d1fae5",
+            "Strong Yes": "#d1fae5",
+            "Yes": "#dcfce7",
             "Maybe": "#fef3c7",
-            "Reject": "#fee2e2",
+            "No": "#fee2e2",
         }
         default_bg = "#ffffff"
 
@@ -164,15 +238,16 @@ def _hr_results_dashboard(
 ) -> None:
     """Render HR screening leaderboard, chart, export, and expanders."""
     st.markdown("##### Results summary")
-    hire_n = int((df["Recommendation"] == "Hire").sum())
+    strong_yes_n = int((df["Recommendation"] == "Strong Yes").sum())
+    yes_n = int((df["Recommendation"] == "Yes").sum())
     maybe_n = int((df["Recommendation"] == "Maybe").sum())
-    reject_n = int((df["Recommendation"] == "Reject").sum())
+    no_n = int((df["Recommendation"] == "No").sum())
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Candidates", len(df))
     top = df["Final Score"].max() if len(df) else 0.0
     m2.metric("Top final score", f"{top:.3f}")
-    m3.metric("Hire", hire_n)
-    m4.metric("Maybe · Reject", f"{maybe_n} · {reject_n}")
+    m3.metric("Strong Yes · Yes", f"{strong_yes_n} · {yes_n}")
+    m4.metric("Maybe · No", f"{maybe_n} · {no_n}")
 
     with section_card("Leaderboard", "Final score = 40% embedding similarity + 60% LLM score (0–10 scaled)."):
         try:
@@ -217,6 +292,11 @@ def _hr_results_dashboard(
                 st.markdown(f"- {s}")
             st.markdown("**Summary**")
             st.write(row["_summary"])
+            breakdown = row.get("_score_breakdown") or {}
+            if isinstance(breakdown, dict) and breakdown:
+                st.markdown("**Score breakdown**")
+                for key, value in breakdown.items():
+                    st.markdown(f"- {key.replace('_', ' ').title()}: {float(value):.2f}/10")
 
 
 def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
@@ -276,34 +356,63 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
 
     with section_card(
         "Candidate resumes",
-        "Upload one or many PDFs — similarity runs in batch; LLM scores each file.",
+        "Upload one or many PDFs, or paste multiple resumes separated by ----. Batch scoring handles both.",
     ):
-        resumes = st.file_uploader(
-            "Resume PDFs",
-            type=["pdf"],
-            accept_multiple_files=True,
-            key="hr_resumes",
-            help="ATS-style PDFs work best. Scanned images need OCR outside this app.",
-        )
+        resume_tab1, resume_tab2 = st.tabs(["📎 Upload PDFs", "✍️ Paste text"])
+        with resume_tab1:
+            resumes = st.file_uploader(
+                "Resume PDFs",
+                type=["pdf"],
+                accept_multiple_files=True,
+                key="hr_resumes",
+                help="ATS-style PDFs work best. Scanned images need OCR outside this app.",
+            )
+        with resume_tab2:
+            pasted_resumes = st.text_area(
+                "Paste resumes",
+                key="hr_resume_paste",
+                height=180,
+                placeholder="Paste one resume here, then use a line with only ---- before the next resume.",
+                help="Each block should contain a single candidate resume.",
+            )
+
+    resume_entries: list[tuple[str, str]] = []
+    if resumes:
+        for f in resumes:
+            if _pdf_too_large(f):
+                st.warning(f"Skipping {getattr(f, 'name', 'resume')}: file is larger than 20 MB.")
+                continue
+            f.seek(0)
+            t = extract_text_from_upload(f)
+            resume_entries.append((getattr(f, "name", "candidate") or "candidate", t or ""))
+    for idx, block in enumerate(_split_multiblock_text(pasted_resumes), start=1):
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        guessed_name = lines[0] if lines else f"Pasted resume {idx}"
+        resume_entries.append((guessed_name[:80] or f"Pasted resume {idx}", block))
+    cleaned_resume_entries: list[tuple[str, str]] = []
+    for label, body in resume_entries:
+        if str(body or "").strip():
+            cleaned_resume_entries.append((label, body))
+        else:
+            st.warning(f"Skipping empty resume input: {label}")
+    resume_entries = cleaned_resume_entries
 
     with st.expander("🔍 Extracted text preview (debug)", expanded=False):
         st.text_area("Job description (combined)", job_description[:8000] or "(empty)", height=120)
-        if resumes:
-            for f in resumes:
-                f.seek(0)
-                t = extract_text_from_upload(f)
-                st.markdown(f"**{f.name}**")
-                st.text(t[:4000] or "(empty)")
+        if resume_entries:
+            for label, body in resume_entries:
+                st.markdown(f"**{label}**")
+                st.text(body[:4000] or "(empty)")
 
     _jd_quality_warning(job_description)
-    n_resume_files = len(resumes) if resumes else 0
+    n_resume_files = len(resume_entries)
     if n_resume_files:
-        st.caption(f"📎 **{n_resume_files}** resume file(s) selected · JD **{len(job_description)}** characters")
+        st.caption(f"📎 **{n_resume_files}** resume(s) queued · JD **{len(job_description)}** characters")
 
     _hr_step = 0
     if st.session_state.get("hr_results"):
         _hr_step = 2
-    elif job_description.strip() and resumes:
+    elif job_description.strip() and resume_entries:
         _hr_step = 1
     step_indicator(["Load JD & resumes", "Run screening", "Review results"], _hr_step, dark)
 
@@ -311,29 +420,26 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
     if st.button("Run screening", type="primary", key="hr_run", use_container_width=True):
         if not job_description.strip():
             st.error("Please provide a job description (text and/or PDF).")
-        elif not resumes:
-            st.error("Please upload at least one resume PDF.")
+        elif not resume_entries:
+            st.error("Please upload or paste at least one resume.")
         else:
-            names: list[str] = []
-            texts: list[str] = []
-            for f in resumes:
-                f.seek(0)
-                txt = extract_text_from_upload(f)
-                names.append(getattr(f, "name", "candidate") or "candidate")
-                texts.append(txt or "")
+            names = [label for label, _ in resume_entries]
+            texts = [body for _, body in resume_entries]
 
             if all(not (t or "").strip() for t in texts):
-                st.error("All uploaded PDFs appear empty or unreadable.")
+                st.error("All provided resumes appear empty or unreadable.")
             else:
                 embedder = get_sentence_transformer()
-                with st.spinner("Stage 1: computing embedding similarity…"):
+                with st.status("Screening candidates", expanded=True) as status:
+                    status.write("Stage 1: computing embedding similarity.")
+                    render_loading_skeleton(3)
                     sims = similarity_scores_batched(embedder, job_description, texts)
 
-                llm_results: list[dict[str, Any]] = []
-                n = len(names)
-                progress = st.progress(0.0, text="Stage 2: LLM analysis…")
-                for i, (label, resume_body) in enumerate(zip(names, texts)):
-                    with st.spinner(f"Analyzing {label} ({i + 1}/{n})…"):
+                    llm_results: list[dict[str, Any]] = []
+                    n = len(names)
+                    progress = st.progress(0.0, text="Stage 2: LLM analysis…")
+                    for i, (label, resume_body) in enumerate(resume_entries):
+                        status.write(f"Scoring {label} ({i + 1}/{n})")
                         llm_results.append(
                             score_candidate_resume(
                                 client,
@@ -341,10 +447,12 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                                 job_description,
                                 resume_body,
                                 label,
+                                stream=True,
                             )
                         )
-                    progress.progress((i + 1) / n, text=f"Stage 2: analyzed {i + 1}/{n}")
-                progress.empty()
+                        progress.progress((i + 1) / n, text=f"Stage 2: analyzed {i + 1}/{n}")
+                    progress.empty()
+                    status.update(label="Screening complete", state="complete", expanded=False)
 
                 rows: list[dict[str, Any]] = []
                 for label, sim, lr in zip(names, sims, llm_results):
@@ -361,10 +469,11 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                             "Final Score": round(final, 4),
                             "Recommendation": lr.get("recommendation", "Maybe"),
                             "_strengths": lr.get("strengths", []),
-                            "_weaknesses": lr.get("weaknesses", []),
+                            "_weaknesses": lr.get("gaps", lr.get("weaknesses", [])),
                             "_missing": lr.get("missing_skills", []),
                             "_keywords": lr.get("keyword_matches", []),
                             "_summary": lr.get("summary", ""),
+                            "_score_breakdown": lr.get("score_breakdown", {}),
                             "_file_label": label,
                         }
                     )
@@ -399,14 +508,35 @@ def _collect_user_details_form() -> Optional[dict[str, Any]]:
         "Full name *",
         key="cand_name",
         placeholder="As it should appear on the resume",
+        help="Use the exact name you want shown at the top of the resume.",
     )
     c1, c2 = st.columns(2)
     with c1:
-        email = st.text_input("Email", key="cand_email")
-        linkedin = st.text_input("LinkedIn", key="cand_li")
+        email = st.text_input(
+            "Email",
+            key="cand_email",
+            placeholder="name@example.com",
+            help="Add the email address recruiters should use.",
+        )
+        linkedin = st.text_input(
+            "LinkedIn",
+            key="cand_li",
+            placeholder="linkedin.com/in/your-handle",
+            help="Optional, but recommended for modern resumes.",
+        )
     with c2:
-        phone = st.text_input("Phone", key="cand_phone")
-        github = st.text_input("GitHub", key="cand_gh")
+        phone = st.text_input(
+            "Phone",
+            key="cand_phone",
+            placeholder="+1 555 123 4567",
+            help="Include a number where employers can reach you quickly.",
+        )
+        github = st.text_input(
+            "GitHub",
+            key="cand_gh",
+            placeholder="github.com/your-handle",
+            help="Optional if you have code or projects to share.",
+        )
 
     st.divider()
     st.markdown("**Education**")
@@ -429,7 +559,13 @@ def _collect_user_details_form() -> Optional[dict[str, Any]]:
         )
         st.rerun()
 
-    skills = st.text_area("Skills (free text)", key="cand_skills", height=80)
+    skills = st.text_area(
+        "Skills (free text)",
+        key="cand_skills",
+        height=80,
+        placeholder="Python, PyTorch, SQL, AWS, Docker, communication…",
+        help="List all skills you want the model to consider and categorize.",
+    )
 
     st.markdown("**Projects**")
     for i, pr in enumerate(st.session_state.projects):
@@ -469,9 +605,19 @@ def _collect_user_details_form() -> Optional[dict[str, Any]]:
         )
         st.rerun()
 
-    certifications = st.text_area("Certifications", key="cand_certs", height=60)
+    certifications = st.text_area(
+        "Certifications",
+        key="cand_certs",
+        height=60,
+        placeholder="AWS Certified Solutions Architect, TensorFlow Developer…",
+        help="Optional: include professional certifications, licenses, or coursework.",
+    )
     achievements = st.text_area(
-        "Achievements / extracurriculars", key="cand_ach", height=60
+        "Achievements / extracurriculars",
+        key="cand_ach",
+        height=60,
+        placeholder="Hackathon wins, publications, clubs, awards, volunteer work…",
+        help="Optional: add anything that supports the profile without inventing facts.",
     )
 
     if not (name or "").strip():
@@ -572,6 +718,13 @@ def _candidate_simulation_panel(lr: dict[str, Any], emb: float, final: float, da
             st.markdown("**Missing skills**")
             for s in lr.get("missing_skills") or []:
                 st.markdown(f"- {s}")
+        breakdown = lr.get("score_breakdown") or {}
+        if isinstance(breakdown, dict) and breakdown:
+            st.markdown("**Score breakdown**")
+            bcols = st.columns(min(3, max(1, len(breakdown))))
+            for idx, (key, value) in enumerate(breakdown.items()):
+                with bcols[idx % len(bcols)]:
+                    st.metric(key.replace("_", " ").title(), f"{float(value):.2f}/10")
         st.markdown("**Summary**")
         st.write(lr.get("summary", ""))
 
@@ -662,8 +815,11 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
         if not combined_jd.strip():
             st.error("Add at least one job description (PDF or pasted text).")
         else:
-            with st.spinner("Analyzing all job descriptions with LLM…"):
-                analysis = analyze_job_descriptions(client, model_id, combined_jd)
+            with st.status("Analyzing job descriptions", expanded=True) as status:
+                status.write("Reading role patterns and extracting shared requirements.")
+                render_loading_skeleton(3)
+                analysis = analyze_job_descriptions(client, model_id, combined_jd, stream=True)
+                status.update(label="Job description analysis complete", state="complete", expanded=False)
             st.session_state["jd_analysis"] = analysis
             st.session_state["combined_jd_for_sim"] = combined_jd
             st.success("Analysis complete.")
@@ -716,14 +872,18 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
         elif user_details is None:
             st.error("Full name is required.")
         else:
-            with st.spinner("Generating resume JSON with LLM…"):
+            with st.status("Generating tailored resume", expanded=True) as status:
+                status.write("Building an ATS-friendly resume from your real details.")
+                render_loading_skeleton(4)
                 resume = generate_resume_json(
                     client,
                     model_id,
                     analysis,
                     user_details,
                     user_details.get("full_name", "Candidate"),
+                    stream=True,
                 )
+                status.update(label="Resume generation complete", state="complete", expanded=False)
             st.session_state["last_resume"] = resume
             st.session_state["last_user_name"] = user_details.get("full_name", "")
             st.session_state.pop("cand_sim", None)
@@ -777,24 +937,28 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
                     st.error("Generated resume text is empty.")
                 else:
                     embedder = get_sentence_transformer()
-                    with st.spinner("Computing similarity…"):
+                    with st.status("Simulating screening", expanded=True) as status:
+                        status.write("Computing semantic similarity against the loaded JDs.")
+                        render_loading_skeleton(3)
                         sims = similarity_scores_batched(embedder, jd_for_sim, [plain])
-                    emb = sims[0] if sims else 0.0
-                    with st.spinner("LLM evaluation…"):
+                        emb = sims[0] if sims else 0.0
+                        status.write("Running the weighted recruiter rubric.")
                         lr = score_candidate_resume(
                             client,
                             model_id,
                             jd_for_sim,
                             plain,
                             st.session_state.get("last_user_name", "You"),
+                            stream=True,
                         )
-                    llm_score = float(lr.get("llm_score", 0.0))
-                    final = (emb * 0.4) + (llm_score / 10.0 * 0.6)
-                    st.session_state["cand_sim"] = {
-                        "lr": lr,
-                        "emb": emb,
-                        "final": final,
-                    }
+                        llm_score = float(lr.get("llm_score", 0.0))
+                        final = (emb * 0.4) + (llm_score / 10.0 * 0.6)
+                        st.session_state["cand_sim"] = {
+                            "lr": lr,
+                            "emb": emb,
+                            "final": final,
+                        }
+                        status.update(label="Simulation complete", state="complete", expanded=False)
                     try:
                         append_entry(
                             "self_simulation",
@@ -866,6 +1030,7 @@ def main() -> None:
         page_icon="◈",
         layout="wide",
     )
+    init_lm_session_defaults()
     st.session_state.setdefault("ui_theme", "light")
 
     if "lm_ok" not in st.session_state:
@@ -885,6 +1050,45 @@ def main() -> None:
             help="HR: rank many PDFs vs. one role. Candidate: merge many JDs into one tailored resume.",
         )
 
+        with st.expander("LM Studio settings", expanded=False):
+            st.text_input(
+                "Base URL",
+                key="lm_base_url",
+                help="Use your local LM Studio server URL, usually http://localhost:1234/v1.",
+            )
+            st.text_input(
+                "API key",
+                key="lm_api_key",
+                type="password",
+                help="LM Studio accepts a local placeholder key; keep this as lm-studio unless you changed it.",
+            )
+            st.number_input(
+                "Request timeout (seconds)",
+                min_value=30,
+                max_value=600,
+                step=15,
+                key="lm_timeout",
+            )
+            st.number_input(
+                "Retry attempts",
+                min_value=0,
+                max_value=5,
+                step=1,
+                key="lm_max_retries",
+            )
+            st.text_input(
+                "Preferred model name",
+                key="lm_model_override",
+                help="Leave blank to use the loaded model exposed by LM Studio.",
+            )
+            if st.button("Apply settings", key="lm_apply_settings", use_container_width=True):
+                try:
+                    cached_model_ids.clear()
+                except Exception:
+                    pass
+                refresh_connection_state()
+                st.rerun()
+
         st.divider()
         st.markdown("**LM Studio**")
         if st.button("↻ Check connection", key="lm_check", use_container_width=True):
@@ -896,7 +1100,7 @@ def main() -> None:
 
         ok = st.session_state.get("lm_ok", False)
         mid = st.session_state.get("lm_model_id")
-        render_connection_status(ok, mid)
+        render_connection_status(ok, mid, st.session_state.get("lm_base_url"))
         if not ok:
             st.warning(CONNECTION_ERROR_MESSAGE)
         mids = st.session_state.get("lm_all_models") or []
@@ -914,10 +1118,9 @@ def main() -> None:
         "ATS-friendly resume aligned to your target roles. Your data never leaves this machine.",
     )
 
-    client = create_lm_studio_client()
-    model_id: Optional[str] = fetch_loaded_model_id(client)
-    if not model_id:
-        model_id = st.session_state.get("lm_model_id")
+    client = build_lm_client()
+    loaded_model_id: Optional[str] = fetch_loaded_model_id(client)
+    model_id = resolve_active_model_id(client, loaded_model_id or st.session_state.get("lm_model_id"))
 
     if not st.session_state.get("lm_ok", False):
         st.error(CONNECTION_ERROR_MESSAGE)

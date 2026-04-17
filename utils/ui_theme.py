@@ -193,6 +193,78 @@ def inject_global_styles(theme: str) -> None:
                 100% { background-position: 200% 0; }
             }
 
+            :root {
+                --resona-bg-light: #f6f7fb;
+                --resona-surface-light: #ffffff;
+                --resona-surface-2-light: #f8fafc;
+                --resona-border-light: #dbe4f0;
+                --resona-text-light: #0f172a;
+                --resona-muted-light: #64748b;
+                --resona-accent-light: #4f46e5;
+                --resona-bg-dark: #0f0f14;
+                --resona-surface-dark: #16161f;
+                --resona-surface-2-dark: #1a1a22;
+                --resona-border-dark: #2d2d3a;
+                --resona-text-dark: #e8eaed;
+                --resona-muted-dark: #94a3b8;
+                --resona-accent-dark: #818cf8;
+            }
+
+            .stApp[data-resona-theme="light"],
+            .stApp:not([data-resona-theme]) {
+                color-scheme: light;
+                background: radial-gradient(circle at top left, #eef2ff 0%, #f8fafc 28%, #eef2f7 100%) !important;
+                color: var(--resona-text-light) !important;
+            }
+            .stApp[data-resona-theme="dark"] {
+                color-scheme: dark;
+                background: radial-gradient(circle at top left, #171727 0%, #0f0f14 38%, #0b0b0f 100%) !important;
+                color: var(--resona-text-dark) !important;
+            }
+            .stApp[data-resona-theme="light"] [data-baseweb="input"] input,
+            .stApp[data-resona-theme="light"] [data-baseweb="textarea"] textarea,
+            .stApp[data-resona-theme="light"] [data-baseweb="select"] > div,
+            .stApp:not([data-resona-theme]) [data-baseweb="input"] input,
+            .stApp:not([data-resona-theme]) [data-baseweb="textarea"] textarea,
+            .stApp:not([data-resona-theme]) [data-baseweb="select"] > div {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                border-color: #d7deea !important;
+            }
+            .stApp[data-resona-theme="light"] [data-testid="stMetric"],
+            .stApp[data-resona-theme="light"] [data-testid="stExpander"],
+            .stApp[data-resona-theme="light"] [data-testid="stVerticalBlockBorderWrapper"],
+            .stApp:not([data-resona-theme]) [data-testid="stMetric"],
+            .stApp:not([data-resona-theme]) [data-testid="stExpander"],
+            .stApp:not([data-resona-theme]) [data-testid="stVerticalBlockBorderWrapper"] {
+                background: rgba(255, 255, 255, 0.92) !important;
+                border-color: #dbe4f0 !important;
+            }
+            .stApp[data-resona-theme="light"] [data-testid="stDataFrame"],
+            .stApp[data-resona-theme="light"] [data-testid="stJson"],
+            .stApp:not([data-resona-theme]) [data-testid="stDataFrame"],
+            .stApp:not([data-resona-theme]) [data-testid="stJson"] {
+                color: #0f172a !important;
+            }
+            .resona-skeleton {
+                position: relative;
+                overflow: hidden;
+                border-radius: 10px;
+                background: linear-gradient(90deg, rgba(148,163,184,0.12) 25%, rgba(148,163,184,0.24) 37%, rgba(148,163,184,0.12) 63%);
+                background-size: 400% 100%;
+                animation: resona-shimmer 1.4s ease infinite;
+            }
+            .resona-skeleton-line {
+                height: 12px;
+                margin: 0.5rem 0;
+            }
+            .resona-skeleton-card {
+                padding: 1rem;
+                border: 1px solid rgba(148,163,184,0.18);
+                background: rgba(255,255,255,0.6);
+                border-radius: 12px;
+            }
+
             html, body, .stApp, [data-testid="stAppViewContainer"] {
                 font-family: 'Plus Jakarta Sans', 'Segoe UI', system-ui, sans-serif !important;
             }
@@ -565,7 +637,7 @@ def render_sidebar_brand(title: str, description: str) -> None:
     )
 
 
-def render_connection_status(ok: bool, model_id: str | None) -> None:
+def render_connection_status(ok: bool, model_id: str | None, endpoint: str | None = None) -> None:
     """Render LM Studio status pill and model id box in the sidebar."""
     if ok:
         st.markdown(
@@ -579,6 +651,8 @@ def render_connection_status(ok: bool, model_id: str | None) -> None:
             '<span style="font-size:1.1rem">●</span> Server unreachable</div>',
             unsafe_allow_html=True,
         )
+    if endpoint:
+        st.caption(f"Endpoint: {endpoint}")
     st.caption("Active model")
     mid = model_id or "(none)"
     safe = (
@@ -627,6 +701,17 @@ def section_card(title: str, subtitle: str | None = None) -> Generator[None, Non
         if subtitle:
             st.caption(subtitle)
         yield
+
+
+def render_loading_skeleton(lines: int = 3, card: bool = True) -> None:
+    """Render a compact skeleton loading block."""
+    outer_class = "resona-skeleton-card" if card else ""
+    st.markdown(
+        "<div class='" + outer_class + "'>"
+        + "".join("<div class='resona-skeleton resona-skeleton-line'></div>" for _ in range(max(1, lines)))
+        + "</div>",
+        unsafe_allow_html=True,
+    )
 
 
 def mode_segmented_label(mode: str) -> str:

@@ -72,6 +72,8 @@ def analyze_job_descriptions(
     client: Any,
     model: str,
     combined_jd_text: str,
+    stream: bool = False,
+    on_chunk: Any = None,
 ) -> dict[str, Any]:
     """
     Send all JD texts to the LLM and return structured analysis JSON.
@@ -108,6 +110,10 @@ def analyze_job_descriptions(
         retry_user,
         temperature=0.3,
         max_tokens=2000,
+        stream=stream,
+        on_chunk=on_chunk,
+        max_attempts=3,
+        base_delay=0.75,
     )
     if result.get("_parse_error"):
         return _default_analysis()
