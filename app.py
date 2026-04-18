@@ -38,6 +38,20 @@ from utils.ui_theme import (
     section_card,
     step_indicator,
 )
+# NEW: Import session, text analysis, and visualization utilities
+from utils.session_manager import delete_session, list_sessions, load_hr_session, save_hr_session
+from utils.text_analyzer import (
+    anonymize_resume,
+    extract_candidate_name,
+    extract_keywords,
+    find_keyword_gaps,
+)
+from utils.visualizations import (
+    render_audit_log_entry,
+    render_candidate_comparison_details,
+    render_keyword_gap_analysis,
+    render_radar_chart,
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
@@ -49,6 +63,57 @@ DEFAULT_LM_API_KEY = "lm-studio"
 DEFAULT_LM_TIMEOUT = 180.0
 DEFAULT_LM_MAX_RETRIES = 2
 MAX_PDF_BYTES = 20 * 1024 * 1024
+
+
+# NEW: Audit log storage
+AUDIT_LOG_MAX_ENTRIES = 50
+AUDIT_LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "audit_log.jsonl")
+
+
+# NEW: Initialize session state for new features
+def _init_feature_state() -> None:
+    """Initialize session state for new features."""
+    st.session_state.setdefault("hr_anonymize", False)
+    st.session_state.setdefault("hr_shortlist", {})
+    st.session_state.setdefault("hr_notes", {})
+    st.session_state.setdefault("audit_log_entries", [])
+    st.session_state.setdefault("audit_log_visible", False)
+
+
+# NEW: Log LLM call to audit log
+def _log_llm_call(
+    model_id: str,
+    prompt: str,
+    response: str,
+    parsed_score: Optional[float] = None,
+    error: Optional[str] = None,
+) -> None:
+    """Append LLM call to audit log."""
+    import datetime
+    import json
+    
+    entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "model": model_id,
+        "prompt": prompt[:2000],  # Truncate long prompts
+        "response": response[:3000],  # Truncate long responses
+        "parsed_score": parsed_score,
+        "error": error,
+    }
+    
+    st.session_state["audit_log_entries"].append(entry)
+    
+    # Keep only recent entries in session
+    if len(st.session_state["audit_log_entries"]) > AUDIT_LOG_MAX_ENTRIES:
+        st.session_state["audit_log_entries"] = st.session_state["audit_log_entries"][-AUDIT_LOG_MAX_ENTRIES:]
+    
+    # Persist to disk
+    try:
+        os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
+        with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
 
 
 @st.cache_resource
@@ -147,6 +212,29 @@ def _split_multiblock_text(text: str) -> list[str]:
         return []
     blocks = [chunk.strip() for chunk in str(text).split("\n----\n")]
     return [chunk for chunk in blocks if chunk]
+
+
+# NEW: Clear HR Mode files and state
+def _clear_hr_files() -> None:
+    """
+    Clear all HR Mode files from session state and show confirmation.
+    
+    Clears:
+    - Uploaded resume files from session
+    - Pasted resume text from session
+    - Job description inputs (text and file)
+    - Current results if any
+    - Shows toast confirmation
+    """
+    st.session_state.pop("hr_resumes", None)
+    st.session_state.pop("hr_resume_paste", None)
+    st.session_state.pop("hr_jd_text", None)
+    st.session_state.pop("hr_jd_pdf", None)
+    st.session_state.pop("hr_results", None)
+    try:
+        st.toast("🗑️ All files cleared — ready to start fresh.", icon="✅")
+    except Exception:
+        pass
 
 
 def _pdf_too_large(uploaded_file: Any) -> bool:
@@ -265,8 +353,22 @@ def _hr_results_dashboard(
     df: pd.DataFrame,
     display_cols: list[str],
     dark: bool,
+    job_description: str = "",
+    resume_entries: list[tuple[str, str]] = None,
 ) -> None:
-    """Render HR screening leaderboard, chart, export, and expanders."""
+    """
+    Render HR screening leaderboard with enhancements:
+    - Shortlist checkboxes
+    - Per-candidate radar charts
+    - Keyword gap analysis
+    - Candidate comparison
+    - Export with notes
+    
+    NEW: Added job_description and resume_entries for analysis features.
+    """
+    if resume_entries is None:
+        resume_entries = []
+    
     st.markdown("##### Results summary")
     strong_yes_n = int((df["Recommendation"] == "Strong Yes").sum())
     yes_n = int((df["Recommendation"] == "Yes").sum())
@@ -293,21 +395,115 @@ def _hr_results_dashboard(
         chart_df = df[["Name", "Final Score"]].set_index("Name")
         st.bar_chart(chart_df, height=280)
 
-    csv_bytes = df[display_cols].to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "⬇️ Export results as CSV",
-        data=csv_bytes,
-        file_name="screening_results.csv",
-        mime="text/csv",
-        use_container_width=True,
-    )
+    # NEW: Session save/restore options
+    with section_card("Session management", "Save this screening session for later review."):
+        col_save, col_export = st.columns(2)
+        with col_save:
+            session_id = st.text_input(
+                "Session name",
+                value="",
+                placeholder="e.g., Engineering_Round1",
+                key="hr_session_name",
+            )
+            if st.button("💾 Save session", use_container_width=True):
+                if session_id:
+                    success = save_hr_session(
+                        session_id,
+                        job_description,
+                        resume_entries,
+                        {"records": df.to_dict(orient="records")},
+                    )
+                    if success:
+                        st.toast(f"✅ Session '{session_id}' saved.", icon="✅")
+                    else:
+                        st.error("Failed to save session.")
+                else:
+                    st.warning("Enter a session name.")
+        
+        with col_export:
+            # NEW: Export with shortlist and notes
+            export_data = df[display_cols].copy()
+            if "hr_shortlist" in st.session_state:
+                shortlist_col = []
+                for idx, row in df.iterrows():
+                    name = row["Name"]
+                    is_shortlisted = st.session_state.get("hr_shortlist", {}).get(name, False)
+                    shortlist_col.append("✓" if is_shortlisted else "")
+                export_data.insert(0, "Shortlisted", shortlist_col)
+            
+            csv_bytes = export_data.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Export results as CSV",
+                data=csv_bytes,
+                file_name="screening_results.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+    # NEW: Candidate comparison
+    st.markdown("#### Candidate comparison")
+    col_comp1, col_comp2 = st.columns([2, 1])
+    with col_comp1:
+        selected_for_comparison = st.multiselect(
+            "Select 2-3 candidates to compare",
+            options=df["Name"].tolist(),
+            max_selections=3,
+            key="hr_comparison_select",
+        )
+    with col_comp2:
+        if st.button("📊 Compare", key="hr_compare_btn", use_container_width=True):
+            if selected_for_comparison:
+                st.session_state["hr_comparison_active"] = True
+            else:
+                st.session_state["hr_comparison_active"] = False
+    
+    # Render comparison if active
+    if st.session_state.get("hr_comparison_active", False) and selected_for_comparison:
+        st.divider()
+        comparison_candidates = df[df["Name"].isin(selected_for_comparison)].to_dict(orient="records")
+        render_candidate_comparison_details(comparison_candidates)
+        st.divider()
 
     st.markdown("#### Candidate deep dive")
-    for _, row in df.iterrows():
+    for idx, (_, row) in enumerate(df.iterrows()):
         rec = row["Recommendation"]
         badge_emoji = {"Hire": "🟢", "Maybe": "🟡", "Reject": "🔴"}.get(str(rec), "⚪")
-        title = f"{badge_emoji} {row['Name']} · {rec} · {row['Final Score']:.3f}"
+        name = row["Name"]
+        
+        # NEW: Shortlist checkbox in title
+        shortlisted = st.session_state.get("hr_shortlist", {}).get(name, False)
+        shortlist_marker = "🌟" if shortlisted else "⭐"
+        
+        title = f"{badge_emoji} {name} · {rec} · {row['Final Score']:.3f} {shortlist_marker}"
+        
         with st.expander(title):
+            # NEW: Shortlist checkbox and notes
+            col_shortlist, col_notes = st.columns([1, 2])
+            with col_shortlist:
+                is_shortlisted = st.checkbox(
+                    "Shortlist",
+                    value=st.session_state.get("hr_shortlist", {}).get(name, False),
+                    key=f"shortlist_{idx}_{name}",
+                )
+                if "hr_shortlist" not in st.session_state:
+                    st.session_state["hr_shortlist"] = {}
+                st.session_state["hr_shortlist"][name] = is_shortlisted
+            
+            with col_notes:
+                note = st.text_area(
+                    "Notes",
+                    value=st.session_state.get("hr_notes", {}).get(name, ""),
+                    placeholder="Add interview notes, concerns, strengths…",
+                    height=80,
+                    key=f"note_{idx}_{name}",
+                )
+                if "hr_notes" not in st.session_state:
+                    st.session_state["hr_notes"] = {}
+                st.session_state["hr_notes"][name] = note
+            
+            st.divider()
+            
+            # Original fields
             st.markdown("**Strengths**")
             for s in row["_strengths"] or []:
                 st.markdown(f"- {s}")
@@ -322,11 +518,38 @@ def _hr_results_dashboard(
                 st.markdown(f"- {s}")
             st.markdown("**Summary**")
             st.write(row["_summary"])
+            
+            # NEW: Score breakdown radar chart
             breakdown = row.get("_score_breakdown") or {}
             if isinstance(breakdown, dict) and breakdown:
                 st.markdown("**Score breakdown**")
-                for key, value in breakdown.items():
-                    st.markdown(f"- {key.replace('_', ' ').title()}: {float(value):.2f}/10")
+                col_chart, col_table = st.columns([2, 1])
+                
+                with col_chart:
+                    radar = render_radar_chart(breakdown, f"{name} - Score Breakdown")
+                    if radar:
+                        st.plotly_chart(radar, use_container_width=True)
+                
+                with col_table:
+                    st.markdown("**Dimensions**")
+                    for key, value in breakdown.items():
+                        safe_key = key.replace('_', ' ').title()
+                        st.metric(safe_key, f"{float(value):.1f}/10")
+            
+            # NEW: Keyword gap analysis
+            if job_description and resume_entries:
+                # Find corresponding resume for this candidate
+                resume_text = ""
+                for label, text in resume_entries:
+                    if label.lower() == name.lower() or name in label.lower():
+                        resume_text = text
+                        break
+                
+                if resume_text:
+                    st.markdown("**Keyword gap analysis**")
+                    jd_kw, res_kw, coverage = find_keyword_gaps(job_description, resume_text)
+                    render_keyword_gap_analysis(jd_kw, res_kw, coverage)
+
 
 
 def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
@@ -341,6 +564,51 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
         "Final Score",
         "Recommendation",
     ]
+    
+    # NEW: Resume anonymization toggle and session restoration
+    col_anon, col_session = st.columns(2)
+    with col_anon:
+        st.session_state["hr_anonymize"] = st.checkbox(
+            "🔒 Anonymize resumes before scoring",
+            value=st.session_state.get("hr_anonymize", False),
+            help="Remove names, emails, phone numbers to reduce bias.",
+        )
+    with col_session:
+        st.markdown("**Load saved session**")
+        saved_sessions = list_sessions()
+        if saved_sessions:
+            session_names = [s.get("id", "") for s in saved_sessions]
+            selected_session = st.selectbox(
+                "Saved sessions",
+                options=session_names,
+                key="hr_session_restore",
+                label_visibility="collapsed",
+            )
+            if st.button("Restore", key="hr_session_restore_btn", use_container_width=True):
+                session_data = load_hr_session(selected_session)
+                if session_data and session_data.get("results"):
+                    st.session_state["hr_results"] = session_data["results"]
+                    st.rerun()
+        else:
+            st.info("No saved sessions yet.")
+    
+    # NEW: Audit log toggle
+    if st.checkbox("📋 Show audit log", value=st.session_state.get("audit_log_visible", False), key="audit_log_toggle"):
+        st.session_state["audit_log_visible"] = True
+        with st.expander("Audit Log - LLM Interactions", expanded=False):
+            audit_entries = st.session_state.get("audit_log_entries", [])
+            if audit_entries:
+                for entry in reversed(audit_entries[-10:]):  # Show last 10
+                    render_audit_log_entry(
+                        entry.get("timestamp", ""),
+                        entry.get("model", ""),
+                        entry.get("prompt", ""),
+                        entry.get("response", ""),
+                        entry.get("parsed_score"),
+                        entry.get("error"),
+                    )
+            else:
+                st.info("No audit log entries yet.")
 
     hr_payload_top = st.session_state.get("hr_results")
     if hr_payload_top and isinstance(hr_payload_top.get("records"), list):
@@ -355,60 +623,113 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                 st.session_state.pop("hr_results", None)
                 st.rerun()
         df_top = pd.DataFrame(hr_payload_top["records"])
-        _hr_results_dashboard(df_top, display_cols, dark)
+        # MODIFIED: Pass stored session data to dashboard
+        _hr_results_dashboard(
+            df_top, 
+            display_cols, 
+            dark,
+            job_description=st.session_state.get("hr_last_jd", ""),
+            resume_entries=st.session_state.get("hr_last_resumes", []),
+        )
         st.divider()
 
     with section_card(
         "Job description",
-        "Paste text or upload a PDF/DOCX file — both can be combined for one role.",
+        "📌 NEW: Upload one OR multiple JDs to score resumes against all roles simultaneously.",
     ):
         jd_tab1, jd_tab2 = st.tabs(["✏️ Paste text", "📎 Upload PDF/DOCX"])
         with jd_tab1:
             jd_text_input = st.text_area(
-                "Job description",
+                "Job description(s)",
                 height=200,
                 key="hr_jd_text",
-                placeholder="Paste the full posting: role, requirements, nice-to-haves…",
+                placeholder="Paste one JD here. To add more, use ---- as separator.\nExample:\nRole 1 requirements...\n----\nRole 2 requirements...",
             )
         with jd_tab2:
-            jd_pdf = st.file_uploader("Job description file (PDF or DOCX)", type=["pdf", "docx"], key="hr_jd_pdf")
+            jd_pdfs = st.file_uploader(
+                "Job description files (PDF or DOCX)",
+                type=["pdf", "docx"],
+                key="hr_jd_pdf",
+                accept_multiple_files=True,
+                help="Upload multiple JD files to score each resume against all roles.",
+            )
 
-    jd_from_pdf = ""
-    if jd_pdf is not None:
-        file_name = getattr(jd_pdf, "name", "job_description") or "job_description"
-        if file_name.lower().endswith('.docx'):
-            jd_from_pdf = extract_text_from_docx_upload(jd_pdf)
-        else:
-            jd_from_pdf = extract_text_from_upload(jd_pdf)
+    jd_from_pdfs: list[str] = []
+    # MODIFIED: Handle multiple JD files (multi-JD support)
+    if jd_pdfs:
+        for jd_file in jd_pdfs:
+            file_name = getattr(jd_file, "name", "job_description") or "job_description"
+            if file_name.lower().endswith('.docx'):
+                jd_from_pdfs.append(extract_text_from_docx_upload(jd_file) or "")
+            else:
+                jd_from_pdfs.append(extract_text_from_upload(jd_file) or "")
 
-    job_description = (jd_text_input or "").strip()
-    if jd_from_pdf:
-        if job_description:
-            job_description = job_description + "\n\n" + jd_from_pdf
+    # NEW: Parse multiple JDs from text input using ---- separator
+    job_descriptions: list[dict[str, str]] = []
+    
+    # Collect JDs from files
+    for idx, jd_text in enumerate(jd_from_pdfs, start=1):
+        if jd_text.strip():
+            job_descriptions.append({
+                "name": f"File {idx}",
+                "text": jd_text.strip(),
+            })
+    
+    # Collect JDs from pasted text
+    if jd_text_input and jd_text_input.strip():
+        pasted_blocks = _split_multiblock_text(jd_text_input)
+        if len(pasted_blocks) > 1:
+            # Multiple JDs provided
+            for idx, jd_block in enumerate(pasted_blocks, start=len(job_descriptions) + 1):
+                job_descriptions.append({
+                    "name": f"Role {idx - len(jd_from_pdfs)}",
+                    "text": jd_block,
+                })
         else:
-            job_description = jd_from_pdf
+            # Single JD
+            job_descriptions.append({
+                "name": "Primary Role",
+                "text": jd_text_input.strip(),
+            })
+    
+    # For backward compatibility, create combined JD
+    job_description = "\n\n--- JOB DESCRIPTION ---\n\n".join(
+        [jd["text"] for jd in job_descriptions]
+    ) if job_descriptions else ""
 
     with section_card(
         "Candidate resumes",
         "Upload one or many PDFs, or paste multiple resumes separated by ----. Batch scoring handles both.",
     ):
-        resume_tab1, resume_tab2 = st.tabs(["📎 Upload PDFs/DOCX", "✍️ Paste text"])
-        with resume_tab1:
-            resumes = st.file_uploader(
-                "Resume files (PDF or DOCX)",
-                type=["pdf", "docx"],
-                accept_multiple_files=True,
-                key="hr_resumes",
-                help="ATS-style PDFs and Word documents work best. Scanned images need OCR outside this app.",
-            )
-        with resume_tab2:
-            pasted_resumes = st.text_area(
-                "Paste resumes",
-                key="hr_resume_paste",
-                height=180,
-                placeholder="Paste one resume here, then use a line with only ---- before the next resume.",
-                help="Each block should contain a single candidate resume.",
-            )
+        # NEW: Add clear button in the header
+        resume_col_upload, resume_col_clear = st.columns([3, 1])
+        
+        with resume_col_upload:
+            resume_tab1, resume_tab2 = st.tabs(["📎 Upload PDFs/DOCX", "✍️ Paste text"])
+            with resume_tab1:
+                resumes = st.file_uploader(
+                    "Resume files (PDF or DOCX)",
+                    type=["pdf", "docx"],
+                    accept_multiple_files=True,
+                    key="hr_resumes",
+                    help="ATS-style PDFs and Word documents work best. Scanned images need OCR outside this app.",
+                )
+            with resume_tab2:
+                pasted_resumes = st.text_area(
+                    "Paste resumes",
+                    key="hr_resume_paste",
+                    height=180,
+                    placeholder="Paste one resume here, then use a line with only ---- before the next resume.",
+                    help="Each block should contain a single candidate resume.",
+                )
+        
+        # NEW: Clear button
+        with resume_col_clear:
+            st.markdown("")
+            st.markdown("")
+            if st.button("🗑️ Clear", key="hr_clear_files_btn", help="Clear all uploaded resumes and job descriptions", use_container_width=True):
+                _clear_hr_files()
+                st.rerun()
 
     resume_entries: list[tuple[str, str]] = []
     if resumes:
@@ -435,23 +756,34 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
         else:
             st.warning(f"Skipping empty resume input: {label}")
     resume_entries = cleaned_resume_entries
+    
+    # NEW: Apply anonymization if toggled
+    if st.session_state.get("hr_anonymize", False) and resume_entries:
+        anonymized_entries: list[tuple[str, str]] = []
+        for label, body in resume_entries:
+            anonymized_body = anonymize_resume(body)
+            anonymized_entries.append((label, anonymized_body))
+        display_entries = anonymized_entries
+        st.info("ℹ️ Resumes anonymized (names, emails, phone removed) for unbiased scoring.")
+    else:
+        display_entries = resume_entries
 
     with st.expander("🔍 Extracted text preview (debug)", expanded=False):
         st.text_area("Job description (combined)", job_description[:8000] or "(empty)", height=120)
-        if resume_entries:
-            for label, body in resume_entries:
+        if display_entries:
+            for label, body in display_entries:
                 st.markdown(f"**{label}**")
                 st.text(body[:4000] or "(empty)")
 
     _jd_quality_warning(job_description)
-    n_resume_files = len(resume_entries)
+    n_resume_files = len(display_entries)
     if n_resume_files:
         st.caption(f"📎 **{n_resume_files}** resume(s) queued · JD **{len(job_description)}** characters")
 
     _hr_step = 0
     if st.session_state.get("hr_results"):
         _hr_step = 2
-    elif job_description.strip() and resume_entries:
+    elif job_description.strip() and display_entries:
         _hr_step = 1
     step_indicator(["Load JD & resumes", "Run screening", "Review results"], _hr_step, dark)
 
@@ -459,11 +791,11 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
     if st.button("Run screening", type="primary", key="hr_run", use_container_width=True):
         if not job_description.strip():
             st.error("Please provide a job description (text and/or PDF).")
-        elif not resume_entries:
+        elif not display_entries:
             st.error("Please upload or paste at least one resume.")
         else:
-            names = [label for label, _ in resume_entries]
-            texts = [body for _, body in resume_entries]
+            names = [label for label, _ in display_entries]
+            texts = [body for _, body in display_entries]
 
             if all(not (t or "").strip() for t in texts):
                 st.error("All provided resumes appear empty or unreadable.")
@@ -477,7 +809,7 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                     llm_results: list[dict[str, Any]] = []
                     n = len(names)
                     progress = st.progress(0.0, text="Stage 2: LLM analysis…")
-                    for i, (label, resume_body) in enumerate(resume_entries):
+                    for i, (label, resume_body) in enumerate(display_entries):
                         status.write(f"Scoring {label} ({i + 1}/{n})")
                         candidate_progress = st.progress(0.12, text=f"Waiting on LM Studio: {label}")
                         candidate_progress_state = {"last": 0}
@@ -539,6 +871,9 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                 st.session_state["hr_results"] = {
                     "records": df.to_dict(orient="records"),
                 }
+                # MODIFIED: Store job description and resumes for later analysis
+                st.session_state["hr_last_jd"] = job_description
+                st.session_state["hr_last_resumes"] = resume_entries
                 try:
                     append_entry(
                         "hr_screening",
@@ -1115,10 +1450,19 @@ def main() -> None:
         layout="wide",
     )
     init_lm_session_defaults()
+    # NEW: Initialize new feature states
+    _init_feature_state()
     st.session_state.setdefault("ui_theme", "light")
 
+    # MODIFIED: Run LM Studio health check on every startup to keep status fresh
     if "lm_ok" not in st.session_state:
         refresh_connection_state()
+    else:
+        # NEW: Periodically refresh connection status to detect LM Studio going offline/online
+        try:
+            refresh_connection_state()
+        except Exception:
+            pass
 
     with st.sidebar:
         render_sidebar_brand(
@@ -1175,21 +1519,32 @@ def main() -> None:
 
         st.divider()
         st.markdown("**LM Studio**")
-        if st.button("↻ Check connection", key="lm_check", use_container_width=True):
-            try:
-                cached_model_ids.clear()
-            except Exception:
-                pass
-            refresh_connection_state()
-
+        
+        # NEW: Display connection status with visual indicator
         ok = st.session_state.get("lm_ok", False)
         mid = st.session_state.get("lm_model_id")
+        
+        # NEW: Show inline status badge
+        if ok:
+            st.markdown('<div style="color: #10b981; font-weight: 600; margin-bottom: 0.5rem;">🟢 Connected</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="color: #ef4444; font-weight: 600; margin-bottom: 0.5rem;">🔴 Offline</div>', unsafe_allow_html=True)
+        
         render_connection_status(ok, mid, st.session_state.get("lm_base_url"))
         if not ok:
             st.warning(CONNECTION_ERROR_MESSAGE)
         mids = st.session_state.get("lm_all_models") or []
         if mids:
             st.caption("Also seen: " + ", ".join(mids[:5]))
+        
+        # NEW: Add refresh button below status
+        if st.button("↻ Check connection", key="lm_check", use_container_width=True):
+            try:
+                cached_model_ids.clear()
+            except Exception:
+                pass
+            refresh_connection_state()
+            st.rerun()
         render_activity_log_sidebar()
 
     inject_global_styles(active_theme)
