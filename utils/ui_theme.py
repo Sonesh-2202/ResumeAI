@@ -10,7 +10,7 @@ import streamlit.components.v1 as components
 
 # Injected only when the sidebar toggle selects dark — fixes main-pane contrast without relying on iframe JS.
 DARK_FORCE_CSS = """
-<style id="resona-dark-force">
+<style id="talentmatch-dark-force">
     [data-testid="stAppViewContainer"] {
         background: #0f0f14 !important;
         color: #e8eaed !important;
@@ -108,14 +108,14 @@ DARK_FORCE_CSS = """
     [data-testid="stMetric"] div[data-testid="stMetricDelta"] {
         color: #94a3b8 !important;
     }
-    .resona-hero {
+    .talentmatch-hero {
         background: linear-gradient(135deg, #16161f 0%, #1e1b2e 40%, #1a1740 100%) !important;
         border: 1px solid rgba(129, 140, 248, 0.35) !important;
     }
-    .resona-hero p {
+    .talentmatch-hero p {
         color: #94a3b8 !important;
     }
-    .resona-badge {
+    .talentmatch-badge {
         color: #c4b5fd !important;
         background: rgba(99, 102, 241, 0.25) !important;
     }
@@ -138,7 +138,7 @@ DARK_FORCE_CSS = """
 
 def apply_theme_to_app_dom(theme: str) -> None:
     """
-    Set data-resona-theme on host and app documents (helps optional CSS hooks).
+    Set data-talentmatch-theme on host and app documents (helps optional CSS hooks).
 
     Primary dark styling uses Python-injected CSS in inject_global_styles(theme).
 
@@ -154,11 +154,11 @@ def apply_theme_to_app_dom(theme: str) -> None:
             function applyToDoc(doc) {{
                 if (!doc) return;
                 try {{
-                    doc.documentElement.setAttribute("data-resona-theme", t);
+                    doc.documentElement.setAttribute("data-talentmatch-theme", t);
                     const app = doc.querySelector(".stApp");
-                    if (app) app.setAttribute("data-resona-theme", t);
+                    if (app) app.setAttribute("data-talentmatch-theme", t);
                     const main = doc.querySelector('[data-testid="stAppViewContainer"]');
-                    if (main) main.setAttribute("data-resona-theme", t);
+                    if (main) main.setAttribute("data-talentmatch-theme", t);
                 }} catch (e) {{}}
             }}
             try {{ applyToDoc(window.parent.document); }} catch (e) {{}}
@@ -184,81 +184,81 @@ def inject_global_styles(theme: str) -> None:
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
         <style>
-            @keyframes resona-fade-in {
+            @keyframes talentmatch-fade-in {
                 from { opacity: 0; transform: translateY(6px); }
                 to { opacity: 1; transform: translateY(0); }
             }
-            @keyframes resona-shimmer {
+            @keyframes talentmatch-shimmer {
                 0% { background-position: -200% 0; }
                 100% { background-position: 200% 0; }
             }
 
             :root {
-                --resona-bg-light: #f6f7fb;
-                --resona-surface-light: #ffffff;
-                --resona-surface-2-light: #f8fafc;
-                --resona-border-light: #dbe4f0;
-                --resona-text-light: #0f172a;
-                --resona-muted-light: #64748b;
-                --resona-accent-light: #4f46e5;
-                --resona-bg-dark: #0f0f14;
-                --resona-surface-dark: #16161f;
-                --resona-surface-2-dark: #1a1a22;
-                --resona-border-dark: #2d2d3a;
-                --resona-text-dark: #e8eaed;
-                --resona-muted-dark: #94a3b8;
-                --resona-accent-dark: #818cf8;
+                --talentmatch-bg-light: #f6f7fb;
+                --talentmatch-surface-light: #ffffff;
+                --talentmatch-surface-2-light: #f8fafc;
+                --talentmatch-border-light: #dbe4f0;
+                --talentmatch-text-light: #0f172a;
+                --talentmatch-muted-light: #64748b;
+                --talentmatch-accent-light: #4f46e5;
+                --talentmatch-bg-dark: #0f0f14;
+                --talentmatch-surface-dark: #16161f;
+                --talentmatch-surface-2-dark: #1a1a22;
+                --talentmatch-border-dark: #2d2d3a;
+                --talentmatch-text-dark: #e8eaed;
+                --talentmatch-muted-dark: #94a3b8;
+                --talentmatch-accent-dark: #818cf8;
             }
 
-            .stApp[data-resona-theme="light"],
-            .stApp:not([data-resona-theme]) {
+            .stApp[data-talentmatch-theme="light"],
+            .stApp:not([data-talentmatch-theme]) {
                 color-scheme: light;
                 background: radial-gradient(circle at top left, #eef2ff 0%, #f8fafc 28%, #eef2f7 100%) !important;
-                color: var(--resona-text-light) !important;
+                color: var(--talentmatch-text-light) !important;
             }
-            .stApp[data-resona-theme="dark"] {
+            .stApp[data-talentmatch-theme="dark"] {
                 color-scheme: dark;
                 background: radial-gradient(circle at top left, #171727 0%, #0f0f14 38%, #0b0b0f 100%) !important;
-                color: var(--resona-text-dark) !important;
+                color: var(--talentmatch-text-dark) !important;
             }
-            .stApp[data-resona-theme="light"] [data-baseweb="input"] input,
-            .stApp[data-resona-theme="light"] [data-baseweb="textarea"] textarea,
-            .stApp[data-resona-theme="light"] [data-baseweb="select"] > div,
-            .stApp:not([data-resona-theme]) [data-baseweb="input"] input,
-            .stApp:not([data-resona-theme]) [data-baseweb="textarea"] textarea,
-            .stApp:not([data-resona-theme]) [data-baseweb="select"] > div {
+            .stApp[data-talentmatch-theme="light"] [data-baseweb="input"] input,
+            .stApp[data-talentmatch-theme="light"] [data-baseweb="textarea"] textarea,
+            .stApp[data-talentmatch-theme="light"] [data-baseweb="select"] > div,
+            .stApp:not([data-talentmatch-theme]) [data-baseweb="input"] input,
+            .stApp:not([data-talentmatch-theme]) [data-baseweb="textarea"] textarea,
+            .stApp:not([data-talentmatch-theme]) [data-baseweb="select"] > div {
                 background: #ffffff !important;
                 color: #0f172a !important;
                 border-color: #d7deea !important;
             }
-            .stApp[data-resona-theme="light"] [data-testid="stMetric"],
-            .stApp[data-resona-theme="light"] [data-testid="stExpander"],
-            .stApp[data-resona-theme="light"] [data-testid="stVerticalBlockBorderWrapper"],
-            .stApp:not([data-resona-theme]) [data-testid="stMetric"],
-            .stApp:not([data-resona-theme]) [data-testid="stExpander"],
-            .stApp:not([data-resona-theme]) [data-testid="stVerticalBlockBorderWrapper"] {
+            .stApp[data-talentmatch-theme="light"] [data-testid="stMetric"],
+            .stApp[data-talentmatch-theme="light"] [data-testid="stExpander"],
+            .stApp[data-talentmatch-theme="light"] [data-testid="stVerticalBlockBorderWrapper"],
+            .stApp:not([data-talentmatch-theme]) [data-testid="stMetric"],
+            .stApp:not([data-talentmatch-theme]) [data-testid="stExpander"],
+            .stApp:not([data-talentmatch-theme]) [data-testid="stVerticalBlockBorderWrapper"] {
                 background: rgba(255, 255, 255, 0.92) !important;
                 border-color: #dbe4f0 !important;
             }
-            .stApp[data-resona-theme="light"] [data-testid="stDataFrame"],
-            .stApp[data-resona-theme="light"] [data-testid="stJson"],
-            .stApp:not([data-resona-theme]) [data-testid="stDataFrame"],
-            .stApp:not([data-resona-theme]) [data-testid="stJson"] {
+            .stApp[data-talentmatch-theme="light"] [data-testid="stDataFrame"],
+            .stApp[data-talentmatch-theme="light"] [data-testid="stJson"],
+            .stApp:not([data-talentmatch-theme]) [data-testid="stDataFrame"],
+            .stApp:not([data-talentmatch-theme]) [data-testid="stJson"] {
                 color: #0f172a !important;
             }
-            .resona-skeleton {
+            .talentmatch-skeleton {
                 position: relative;
                 overflow: hidden;
                 border-radius: 10px;
                 background: linear-gradient(90deg, rgba(148,163,184,0.12) 25%, rgba(148,163,184,0.24) 37%, rgba(148,163,184,0.12) 63%);
                 background-size: 400% 100%;
-                animation: resona-shimmer 1.4s ease infinite;
+                animation: talentmatch-shimmer 1.4s ease infinite;
             }
-            .resona-skeleton-line {
+            .talentmatch-skeleton-line {
                 height: 12px;
                 margin: 0.5rem 0;
             }
-            .resona-skeleton-card {
+            .talentmatch-skeleton-card {
                 padding: 1rem;
                 border: 1px solid rgba(148,163,184,0.18);
                 background: rgba(255,255,255,0.6);
@@ -272,7 +272,7 @@ def inject_global_styles(theme: str) -> None:
                 padding-top: 1.25rem;
                 padding-bottom: 3rem;
                 max-width: 1200px;
-                animation: resona-fade-in 0.4s ease-out;
+                animation: talentmatch-fade-in 0.4s ease-out;
             }
             h1, h2, h3, h4, h5 {
                 font-family: 'Plus Jakarta Sans', sans-serif !important;
@@ -280,23 +280,23 @@ def inject_global_styles(theme: str) -> None:
             }
 
             /* ========== LIGHT (default) ========== */
-            .stApp, .stApp:not([data-resona-theme]), .stApp[data-resona-theme="light"] {
-                --resona-radius: 12px;
-                --resona-hero-border: rgba(79, 70, 229, 0.12);
-                --resona-accent: #4f46e5;
-                --resona-accent-soft: rgba(79, 70, 229, 0.1);
+            .stApp, .stApp:not([data-talentmatch-theme]), .stApp[data-talentmatch-theme="light"] {
+                --talentmatch-radius: 12px;
+                --talentmatch-hero-border: rgba(79, 70, 229, 0.12);
+                --talentmatch-accent: #4f46e5;
+                --talentmatch-accent-soft: rgba(79, 70, 229, 0.1);
             }
-            .stApp:not([data-resona-theme]) .resona-hero,
-            .stApp[data-resona-theme="light"] .resona-hero {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-hero,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-hero {
                 background: linear-gradient(135deg, #ffffff 0%, #f8fafc 45%, #eef2ff 100%);
                 border: 1px solid rgba(79, 70, 229, 0.12);
-                border-radius: var(--resona-radius);
+                border-radius: var(--talentmatch-radius);
                 padding: 1.5rem 1.75rem;
                 margin-bottom: 1.5rem;
                 box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 12px 32px rgba(79, 70, 229, 0.08);
             }
-            .stApp:not([data-resona-theme]) .resona-hero h1,
-            .stApp[data-resona-theme="light"] .resona-hero h1 {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-hero h1,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-hero h1 {
                 margin: 0 0 0.35rem 0;
                 font-size: 1.85rem;
                 font-weight: 700;
@@ -305,15 +305,15 @@ def inject_global_styles(theme: str) -> None:
                 -webkit-text-fill-color: transparent;
                 background-clip: text;
             }
-            .stApp:not([data-resona-theme]) .resona-hero p,
-            .stApp[data-resona-theme="light"] .resona-hero p {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-hero p,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-hero p {
                 margin: 0;
                 color: #64748b;
                 font-size: 1rem;
                 line-height: 1.55;
             }
-            .stApp:not([data-resona-theme]) .resona-badge,
-            .stApp[data-resona-theme="light"] .resona-badge {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-badge,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-badge {
                 display: inline-block;
                 font-size: 0.7rem;
                 font-weight: 600;
@@ -325,40 +325,40 @@ def inject_global_styles(theme: str) -> None:
                 border-radius: 999px;
                 margin-bottom: 0.5rem;
             }
-            .stApp:not([data-resona-theme]) .resona-sidebar-brand,
-            .stApp[data-resona-theme="light"] .resona-sidebar-brand {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-sidebar-brand,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-sidebar-brand {
                 font-weight: 700;
                 font-size: 1.15rem;
                 color: #1e1b4b;
                 margin-bottom: 0.25rem;
             }
-            .stApp:not([data-resona-theme]) .resona-sidebar-sub,
-            .stApp[data-resona-theme="light"] .resona-sidebar-sub {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-sidebar-sub,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-sidebar-sub {
                 font-size: 0.85rem;
                 color: #64748b;
                 line-height: 1.45;
                 margin-bottom: 1rem;
             }
-            .stApp:not([data-resona-theme]) .resona-theme-hint,
-            .stApp[data-resona-theme="light"] .resona-theme-hint {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-theme-hint,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-theme-hint {
                 font-size: 0.75rem;
                 color: #94a3b8;
                 margin-top: 0.35rem;
             }
-            .stApp:not([data-resona-theme]) .resona-status-ok,
-            .stApp[data-resona-theme="light"] .resona-status-ok {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-status-ok,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-status-ok {
                 background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
                 color: #065f46;
                 border: 1px solid rgba(16, 185, 129, 0.25);
             }
-            .stApp:not([data-resona-theme]) .resona-status-bad,
-            .stApp[data-resona-theme="light"] .resona-status-bad {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-status-bad,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-status-bad {
                 background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
                 color: #991b1b;
                 border: 1px solid rgba(239, 68, 68, 0.2);
             }
-            .stApp:not([data-resona-theme]) .resona-model-box,
-            .stApp[data-resona-theme="light"] .resona-model-box {
+            .stApp:not([data-talentmatch-theme]) .talentmatch-model-box,
+            .stApp[data-talentmatch-theme="light"] .talentmatch-model-box {
                 background: #f8fafc;
                 border: 1px solid #e2e8f0;
                 border-radius: 8px;
@@ -368,52 +368,52 @@ def inject_global_styles(theme: str) -> None:
                 word-break: break-all;
                 color: #334155;
             }
-            .stApp:not([data-resona-theme]) [data-testid="stSidebar"],
-            .stApp[data-resona-theme="light"] [data-testid="stSidebar"] {
+            .stApp:not([data-talentmatch-theme]) [data-testid="stSidebar"],
+            .stApp[data-talentmatch-theme="light"] [data-testid="stSidebar"] {
                 background: linear-gradient(180deg, #fafafa 0%, #f1f5f9 100%) !important;
                 border-right: 1px solid #e2e8f0 !important;
             }
-            .stApp:not([data-resona-theme]) [data-testid="stAppViewContainer"] > .main,
-            .stApp[data-resona-theme="light"] [data-testid="stAppViewContainer"] > .main {
+            .stApp:not([data-talentmatch-theme]) [data-testid="stAppViewContainer"] > .main,
+            .stApp[data-talentmatch-theme="light"] [data-testid="stAppViewContainer"] > .main {
                 background: linear-gradient(180deg, #f4f4f7 0%, #f8fafc 100%) !important;
             }
-            .stApp:not([data-resona-theme]) div[data-testid="stExpander"],
-            .stApp[data-resona-theme="light"] div[data-testid="stExpander"] {
+            .stApp:not([data-talentmatch-theme]) div[data-testid="stExpander"],
+            .stApp[data-talentmatch-theme="light"] div[data-testid="stExpander"] {
                 border: 1px solid #e2e8f0 !important;
                 border-radius: 10px !important;
                 background: #ffffff !important;
                 box-shadow: 0 1px 2px rgba(15,23,42,0.04);
             }
-            .stApp:not([data-resona-theme]) div[data-testid="stMetric"],
-            .stApp[data-resona-theme="light"] div[data-testid="stMetric"] {
+            .stApp:not([data-talentmatch-theme]) div[data-testid="stMetric"],
+            .stApp[data-talentmatch-theme="light"] div[data-testid="stMetric"] {
                 background: #ffffff !important;
                 border: 1px solid #e2e8f0 !important;
                 border-radius: 10px !important;
                 padding: 0.75rem !important;
                 box-shadow: 0 1px 2px rgba(15,23,42,0.04);
             }
-            .stApp:not([data-resona-theme]) div[data-testid="stVerticalBlockBorderWrapper"],
-            .stApp[data-resona-theme="light"] div[data-testid="stVerticalBlockBorderWrapper"] {
+            .stApp:not([data-talentmatch-theme]) div[data-testid="stVerticalBlockBorderWrapper"],
+            .stApp[data-talentmatch-theme="light"] div[data-testid="stVerticalBlockBorderWrapper"] {
                 background: #ffffff !important;
                 border: 1px solid #e2e8f0 !important;
-                border-radius: var(--resona-radius) !important;
+                border-radius: var(--talentmatch-radius) !important;
                 box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04) !important;
-                animation: resona-fade-in 0.35s ease-out;
+                animation: talentmatch-fade-in 0.35s ease-out;
             }
 
             /* ========== DARK ========== */
-            .stApp[data-resona-theme="dark"] [data-testid="stAppViewContainer"] > .main {
+            .stApp[data-talentmatch-theme="dark"] [data-testid="stAppViewContainer"] > .main {
                 background: linear-gradient(180deg, #0c0c10 0%, #12121a 50%, #0f0f14 100%) !important;
                 color: #e2e8f0 !important;
             }
-            .stApp[data-resona-theme="dark"] .main .block-container {
+            .stApp[data-talentmatch-theme="dark"] .main .block-container {
                 color: #e2e8f0;
             }
-            .stApp[data-resona-theme="dark"] [data-testid="stSidebar"] {
+            .stApp[data-talentmatch-theme="dark"] [data-testid="stSidebar"] {
                 background: linear-gradient(180deg, #111116 0%, #0a0a0e 100%) !important;
                 border-right: 1px solid #27272a !important;
             }
-            .stApp[data-resona-theme="dark"] .resona-hero {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-hero {
                 background: linear-gradient(135deg, #16161f 0%, #1e1b2e 40%, #1a1740 100%);
                 border: 1px solid rgba(129, 140, 248, 0.25);
                 border-radius: 12px;
@@ -421,7 +421,7 @@ def inject_global_styles(theme: str) -> None:
                 margin-bottom: 1.5rem;
                 box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
             }
-            .stApp[data-resona-theme="dark"] .resona-hero h1 {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-hero h1 {
                 margin: 0 0 0.35rem 0;
                 font-size: 1.85rem;
                 font-weight: 700;
@@ -430,13 +430,13 @@ def inject_global_styles(theme: str) -> None:
                 -webkit-text-fill-color: transparent;
                 background-clip: text;
             }
-            .stApp[data-resona-theme="dark"] .resona-hero p {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-hero p {
                 margin: 0;
                 color: #94a3b8;
                 font-size: 1rem;
                 line-height: 1.55;
             }
-            .stApp[data-resona-theme="dark"] .resona-badge {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-badge {
                 display: inline-block;
                 font-size: 0.7rem;
                 font-weight: 600;
@@ -448,24 +448,24 @@ def inject_global_styles(theme: str) -> None:
                 border-radius: 999px;
                 margin-bottom: 0.5rem;
             }
-            .stApp[data-resona-theme="dark"] .resona-sidebar-brand {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-sidebar-brand {
                 font-weight: 700;
                 font-size: 1.15rem;
                 color: #f1f5f9;
                 margin-bottom: 0.25rem;
             }
-            .stApp[data-resona-theme="dark"] .resona-sidebar-sub {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-sidebar-sub {
                 font-size: 0.85rem;
                 color: #94a3b8;
                 line-height: 1.45;
                 margin-bottom: 1rem;
             }
-            .stApp[data-resona-theme="dark"] .resona-theme-hint {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-theme-hint {
                 font-size: 0.75rem;
                 color: #64748b;
                 margin-top: 0.35rem;
             }
-            .stApp[data-resona-theme="dark"] .resona-status-pill {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-status-pill {
                 display: flex;
                 align-items: center;
                 gap: 0.5rem;
@@ -475,17 +475,17 @@ def inject_global_styles(theme: str) -> None:
                 font-weight: 500;
                 margin: 0.5rem 0;
             }
-            .stApp[data-resona-theme="dark"] .resona-status-ok {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-status-ok {
                 background: linear-gradient(135deg, rgba(6, 78, 59, 0.5) 0%, rgba(16, 185, 129, 0.15) 100%);
                 color: #6ee7b7;
                 border: 1px solid rgba(52, 211, 153, 0.35);
             }
-            .stApp[data-resona-theme="dark"] .resona-status-bad {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-status-bad {
                 background: linear-gradient(135deg, rgba(127, 29, 29, 0.4) 0%, rgba(239, 68, 68, 0.12) 100%);
                 color: #fca5a5;
                 border: 1px solid rgba(248, 113, 113, 0.35);
             }
-            .stApp[data-resona-theme="dark"] .resona-model-box {
+            .stApp[data-talentmatch-theme="dark"] .talentmatch-model-box {
                 background: #1a1a22;
                 border: 1px solid #3f3f46;
                 border-radius: 8px;
@@ -495,47 +495,47 @@ def inject_global_styles(theme: str) -> None:
                 word-break: break-all;
                 color: #cbd5e1;
             }
-            .stApp[data-resona-theme="dark"] div[data-testid="stExpander"] {
+            .stApp[data-talentmatch-theme="dark"] div[data-testid="stExpander"] {
                 border: 1px solid #3f3f46 !important;
                 border-radius: 10px !important;
                 background: #16161d !important;
                 box-shadow: 0 4px 24px rgba(0,0,0,0.35);
             }
-            .stApp[data-resona-theme="dark"] div[data-testid="stMetric"] {
+            .stApp[data-talentmatch-theme="dark"] div[data-testid="stMetric"] {
                 background: #16161d !important;
                 border: 1px solid #3f3f46 !important;
                 border-radius: 10px !important;
                 color: #e2e8f0 !important;
             }
-            .stApp[data-resona-theme="dark"] div[data-testid="stVerticalBlockBorderWrapper"] {
+            .stApp[data-talentmatch-theme="dark"] div[data-testid="stVerticalBlockBorderWrapper"] {
                 background: #16161d !important;
                 border: 1px solid #3f3f46 !important;
                 border-radius: 12px !important;
                 box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35) !important;
             }
-            .stApp[data-resona-theme="dark"] [data-baseweb="textarea"] textarea,
-            .stApp[data-resona-theme="dark"] [data-baseweb="input"] input {
+            .stApp[data-talentmatch-theme="dark"] [data-baseweb="textarea"] textarea,
+            .stApp[data-talentmatch-theme="dark"] [data-baseweb="input"] input {
                 background-color: #1a1a22 !important;
                 color: #e2e8f0 !important;
                 border-color: #3f3f46 !important;
             }
-            .stApp[data-resona-theme="dark"] .stSelectbox label,
-            .stApp[data-resona-theme="dark"] .stTextInput label,
-            .stApp[data-resona-theme="dark"] .stTextArea label,
-            .stApp[data-resona-theme="dark"] .stFileUploader label,
-            .stApp[data-resona-theme="dark"] .stRadio label {
+            .stApp[data-talentmatch-theme="dark"] .stSelectbox label,
+            .stApp[data-talentmatch-theme="dark"] .stTextInput label,
+            .stApp[data-talentmatch-theme="dark"] .stTextArea label,
+            .stApp[data-talentmatch-theme="dark"] .stFileUploader label,
+            .stApp[data-talentmatch-theme="dark"] .stRadio label {
                 color: #cbd5e1 !important;
             }
-            .stApp[data-resona-theme="dark"] .stCaption, .stApp[data-resona-theme="dark"] [data-testid="stCaption"] {
+            .stApp[data-talentmatch-theme="dark"] .stCaption, .stApp[data-talentmatch-theme="dark"] [data-testid="stCaption"] {
                 color: #94a3b8 !important;
             }
-            .stApp[data-resona-theme="dark"] [data-testid="stHeader"] {
+            .stApp[data-talentmatch-theme="dark"] [data-testid="stHeader"] {
                 background: rgba(12, 12, 16, 0.85) !important;
                 border-bottom: 1px solid #27272a !important;
             }
 
             /* Shared pills */
-            .resona-status-pill {
+            .talentmatch-status-pill {
                 display: flex;
                 align-items: center;
                 gap: 0.5rem;
@@ -569,7 +569,7 @@ def inject_global_styles(theme: str) -> None:
                 box-shadow: 0 8px 28px rgba(79, 70, 229, 0.5) !important;
                 filter: brightness(1.05);
             }
-            .stApp[data-resona-theme="dark"] .stButton > button[kind="secondary"] {
+            .stApp[data-talentmatch-theme="dark"] .stButton > button[kind="secondary"] {
                 background: #27272a !important;
                 color: #e2e8f0 !important;
                 border: 1px solid #3f3f46 !important;
@@ -582,11 +582,11 @@ def inject_global_styles(theme: str) -> None:
             .stProgress > div > div > div > div {
                 background: linear-gradient(90deg, #4f46e5, #818cf8, #4f46e5) !important;
                 background-size: 200% 100% !important;
-                animation: resona-shimmer 2s linear infinite !important;
+                animation: talentmatch-shimmer 2s linear infinite !important;
             }
 
             /* Dataframe / JSON in dark */
-            .stApp[data-resona-theme="dark"] div[data-testid="stDataFrame"] {
+            .stApp[data-talentmatch-theme="dark"] div[data-testid="stDataFrame"] {
                 border: 1px solid #3f3f46;
                 border-radius: 8px;
                 overflow: hidden;
@@ -602,7 +602,7 @@ def inject_global_styles(theme: str) -> None:
         st.markdown(DARK_FORCE_CSS, unsafe_allow_html=True)
 
 
-def render_hero(title: str, subtitle: str, badge: str = "100% local · Resona") -> None:
+def render_hero(title: str, subtitle: str, badge: str = "100% local · TalentMatch Everywhere") -> None:
     """
     Render the top hero block (HTML inside markdown).
 
@@ -616,8 +616,8 @@ def render_hero(title: str, subtitle: str, badge: str = "100% local · Resona") 
     safe_badge = badge.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     st.markdown(
         f"""
-        <div class="resona-hero">
-            <div class="resona-badge">{safe_badge}</div>
+        <div class="talentmatch-hero">
+            <div class="talentmatch-badge">{safe_badge}</div>
             <h1>{safe_title}</h1>
             <p>{safe_sub}</p>
         </div>
@@ -631,8 +631,8 @@ def render_sidebar_brand(title: str, description: str) -> None:
     t = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     d = description.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     st.markdown(
-        f'<div class="resona-sidebar-brand">{t}</div>'
-        f'<div class="resona-sidebar-sub">{d}</div>',
+        f'<div class="talentmatch-sidebar-brand">{t}</div>'
+        f'<div class="talentmatch-sidebar-sub">{d}</div>',
         unsafe_allow_html=True,
     )
 
@@ -641,13 +641,13 @@ def render_connection_status(ok: bool, model_id: str | None, endpoint: str | Non
     """Render LM Studio status pill and model id box in the sidebar."""
     if ok:
         st.markdown(
-            '<div class="resona-status-pill resona-status-ok">'
+            '<div class="talentmatch-status-pill talentmatch-status-ok">'
             '<span style="font-size:1.1rem">●</span> Connected to LM Studio</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            '<div class="resona-status-pill resona-status-bad">'
+            '<div class="talentmatch-status-pill talentmatch-status-bad">'
             '<span style="font-size:1.1rem">●</span> Server unreachable</div>',
             unsafe_allow_html=True,
         )
@@ -661,7 +661,7 @@ def render_connection_status(ok: bool, model_id: str | None, endpoint: str | Non
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
-    st.markdown(f'<div class="resona-model-box">{safe}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="talentmatch-model-box">{safe}</div>', unsafe_allow_html=True)
 
 
 def render_theme_toggle() -> str:
@@ -675,13 +675,13 @@ def render_theme_toggle() -> str:
     dark = st.toggle(
         "🌙 Dark mode",
         value=st.session_state.ui_theme == "dark",
-        key="resona_dark_toggle",
+        key="talentmatch_dark_toggle",
         help="Switch between light and dark UI. Applies on the next rerun.",
     )
     theme = "dark" if dark else "light"
     st.session_state.ui_theme = theme
     st.markdown(
-        '<p class="resona-theme-hint">Tip: dark mode eases long screening sessions.</p>',
+        '<p class="talentmatch-theme-hint">Tip: dark mode eases long screening sessions.</p>',
         unsafe_allow_html=True,
     )
     return theme
@@ -705,10 +705,10 @@ def section_card(title: str, subtitle: str | None = None) -> Generator[None, Non
 
 def render_loading_skeleton(lines: int = 3, card: bool = True) -> None:
     """Render a compact skeleton loading block."""
-    outer_class = "resona-skeleton-card" if card else ""
+    outer_class = "talentmatch-skeleton-card" if card else ""
     st.markdown(
         "<div class='" + outer_class + "'>"
-        + "".join("<div class='resona-skeleton resona-skeleton-line'></div>" for _ in range(max(1, lines)))
+        + "".join("<div class='talentmatch-skeleton talentmatch-skeleton-line'></div>" for _ in range(max(1, lines)))
         + "</div>",
         unsafe_allow_html=True,
     )

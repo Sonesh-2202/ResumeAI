@@ -1,5 +1,5 @@
 """
-Resona — Streamlit entry: HR resume screening and candidate resume generation.
+TalentMatch Everywhere — Streamlit entry: HR resume screening and candidate resume generation.
 """
 
 import os
@@ -14,7 +14,7 @@ from generator.resume_writer import (
     resume_to_download_bytes,
     resume_to_plain_text,
 )
-from ingestion.pdf_parser import extract_text_from_upload
+from ingestion.pdf_parser import extract_text_from_upload, extract_text_from_docx_upload
 from scoring.embedder import load_embedder, similarity_scores_batched
 from scoring.llm_scorer import (
     CONNECTION_ERROR_MESSAGE,
@@ -360,9 +360,9 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
 
     with section_card(
         "Job description",
-        "Paste text or upload a PDF — both can be combined for one role.",
+        "Paste text or upload a PDF/DOCX file — both can be combined for one role.",
     ):
-        jd_tab1, jd_tab2 = st.tabs(["✏️ Paste text", "📎 Upload PDF"])
+        jd_tab1, jd_tab2 = st.tabs(["✏️ Paste text", "📎 Upload PDF/DOCX"])
         with jd_tab1:
             jd_text_input = st.text_area(
                 "Job description",
@@ -371,11 +371,15 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                 placeholder="Paste the full posting: role, requirements, nice-to-haves…",
             )
         with jd_tab2:
-            jd_pdf = st.file_uploader("PDF job description", type=["pdf"], key="hr_jd_pdf")
+            jd_pdf = st.file_uploader("Job description file (PDF or DOCX)", type=["pdf", "docx"], key="hr_jd_pdf")
 
     jd_from_pdf = ""
     if jd_pdf is not None:
-        jd_from_pdf = extract_text_from_upload(jd_pdf)
+        file_name = getattr(jd_pdf, "name", "job_description") or "job_description"
+        if file_name.lower().endswith('.docx'):
+            jd_from_pdf = extract_text_from_docx_upload(jd_pdf)
+        else:
+            jd_from_pdf = extract_text_from_upload(jd_pdf)
 
     job_description = (jd_text_input or "").strip()
     if jd_from_pdf:
@@ -388,14 +392,14 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
         "Candidate resumes",
         "Upload one or many PDFs, or paste multiple resumes separated by ----. Batch scoring handles both.",
     ):
-        resume_tab1, resume_tab2 = st.tabs(["📎 Upload PDFs", "✍️ Paste text"])
+        resume_tab1, resume_tab2 = st.tabs(["📎 Upload PDFs/DOCX", "✍️ Paste text"])
         with resume_tab1:
             resumes = st.file_uploader(
-                "Resume PDFs",
-                type=["pdf"],
+                "Resume files (PDF or DOCX)",
+                type=["pdf", "docx"],
                 accept_multiple_files=True,
                 key="hr_resumes",
-                help="ATS-style PDFs work best. Scanned images need OCR outside this app.",
+                help="ATS-style PDFs and Word documents work best. Scanned images need OCR outside this app.",
             )
         with resume_tab2:
             pasted_resumes = st.text_area(
@@ -413,8 +417,13 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                 st.warning(f"Skipping {getattr(f, 'name', 'resume')}: file is larger than 20 MB.")
                 continue
             f.seek(0)
-            t = extract_text_from_upload(f)
-            resume_entries.append((getattr(f, "name", "candidate") or "candidate", t or ""))
+            file_name = getattr(f, "name", "candidate") or "candidate"
+            # Determine file type and extract accordingly
+            if file_name.lower().endswith('.docx'):
+                t = extract_text_from_docx_upload(f)
+            else:
+                t = extract_text_from_upload(f)
+            resume_entries.append((file_name, t or ""))
     for idx, block in enumerate(_split_multiblock_text(pasted_resumes), start=1):
         lines = [line.strip() for line in block.splitlines() if line.strip()]
         guessed_name = lines[0] if lines else f"Pasted resume {idx}"
@@ -805,11 +814,11 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
         "Load every JD you care about — we merge patterns before writing your resume.",
     ):
         jd_files = st.file_uploader(
-            "JD PDFs",
-            type=["pdf"],
+            "JD files (PDF or DOCX)",
+            type=["pdf", "docx"],
             accept_multiple_files=True,
             key="cand_jd_pdfs",
-            help="Upload one or more posting PDFs.",
+            help="Upload one or more posting files (PDF or Word documents).",
         )
         pasted_jds = st.text_area(
             "Or paste text (use a line with only ---- between postings)",
@@ -822,7 +831,12 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
         if jd_files:
             for jf in jd_files:
                 jf.seek(0)
-                pdf_texts.append(extract_text_from_upload(jf) or "")
+                file_name = getattr(jf, "name", "job_description") or "job_description"
+                # Determine file type and extract accordingly
+                if file_name.lower().endswith('.docx'):
+                    pdf_texts.append(extract_text_from_docx_upload(jf) or "")
+                else:
+                    pdf_texts.append(extract_text_from_upload(jf) or "")
 
         combined_jd = _combine_jd_texts(pdf_texts, pasted_jds)
         n_pdfs = len(jd_files or [])
@@ -833,10 +847,20 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
                 n_paste_blocks = 1
         else:
             n_paste_blocks = 0
-        st.info(
-            f"**{n_pdfs}** PDF · **{n_paste_blocks}** pasted block(s) · "
-            f"**{len(combined_jd)}** characters combined"
-        )
+        
+        col_info, col_clear = st.columns([3, 1])
+        with col_info:
+            st.info(
+                f"**{n_pdfs}** PDF/DOCX · **{n_paste_blocks}** pasted block(s) · "
+                f"**{len(combined_jd)}** characters combined"
+            )
+        with col_clear:
+            if st.button("🗑️ Clear files", key="cand_clear_jd_files", help="Clear all uploaded JD files"):
+                st.session_state.pop("cand_jd_pdfs", None)
+                st.session_state.pop("cand_jd_paste", None)
+                st.session_state.pop("candidate_jd_combined", None)
+                st.rerun()
+        
         st.session_state["candidate_jd_combined"] = combined_jd
 
     _jd_quality_warning(combined_jd)
@@ -1173,7 +1197,7 @@ def main() -> None:
     dark_ui = active_theme == "dark"
 
     render_hero(
-        "Resona",
+        "TalentMatch Everywhere",
         "Screen applicants with fast embeddings plus local LLM scoring — or generate an "
         "ATS-friendly resume aligned to your target roles. Your data never leaves this machine.",
     )

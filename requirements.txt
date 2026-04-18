@@ -1,5 +1,6 @@
 streamlit>=1.32.0
 PyMuPDF>=1.23.0
+python-docx>=0.8.11
 sentence-transformers>=2.7.0
 openai>=1.0.0
 reportlab>=4.0.0
