@@ -1,0 +1,236 @@
+{
+  "id": "Session1",
+  "timestamp": "2026-04-18T18:31:24.704450",
+  "job_description": "We are seeking a skilled and motivated Software Engineer (Full Stack) to join our team in Chennai. The ideal candidate will have 2–5 years of experience and a strong foundation in both front-end and back-end development. In this role, you will design, develop, test, and maintain scalable web applications while collaborating closely with designers, product managers, and fellow developers to deliver high-quality software solutions. You will be responsible for writing clean, efficient, and reusable code, troubleshooting and debugging issues, and enhancing existing systems to improve performance and reliability. Candidates should hold a degree in Computer Science or a related field and demonstrate proficiency in JavaScript, HTML, and CSS, along with experience in frameworks such as React, Angular, or Vue.js, and backend technologies like Node.js, Java, or Python. Familiarity with RESTful APIs, database systems such as MySQL or MongoDB, and version control tools like Git is essential. Additional advantages include experience with cloud platforms like AWS or Azure, knowledge of DevOps practices and CI/CD pipelines, and exposure to Agile methodologies. Strong problem-solving skills, effective communication, and the ability to work in a fast-paced environment are key to success in this role, which offers competitive compensation, health benefits, flexible working hours, and opportunities for professional growth.",
+  "resume_count": 5,
+  "resumes": [
+    {
+      "name": "avinash G.docx",
+      "preview": "Avinash G\nMobile: 913-730-0694 Avinash87.java@gmail.com\nSUMMARY:\n8+ Years of experience in analysis, design, Implementation, development, and Maintenance of various Dynamic/Static web applications using Java/J2EE technologies.\nExperience and working knowledge of Agile Methodology (Scrum, extreme programming and Unified process), Rational Unified Process and Test driven development (TDD).\nExtensive experience in designing professional UI web applications using front-end technologies like HTML/HTM"
+    },
+    {
+      "name": "chenna kesava.docx",
+      "preview": "CHENNA KESAVA\nPhone: 469-677-7837\nEmail: chennakesava231@gmail.com\nSUMMARY\n8+ years of experience in developing and designing Web Based Internet/Intranet, Client- Server and Multi-tier distributed applications using latest J2EE technologies and various open source frameworks.\nExperienced in all stages of SDLC (Software Development Life Cycle) including proposal, process engineering, requirement analysis, design, development, testing, deployment and support.\nProficient in Object Oriented Analysis"
+    },
+    {
+      "name": "harish S.docx",
+      "preview": "HARISH\nEmail: Harish.ui87@gmail.com\nContact no: +1(980)-285-3958\n__________________________________________________________________________________________________\nPROFESSIONAL SUMMARY\nOver 8+ years of experience as a Full Stack Java Development using spring technologies (MVC, Spring. 4, core, Hibernate, boot, integrations, security) in various domains & frameworks.\nExpertise in the web application development using HTML 4/5, CSS (2/3), JavaScript, jQuery, Angular.JS and Bootstrap.\nHave been wor"
+    },
+    {
+      "name": "indrakaran soma.docx",
+      "preview": "KARAN REDDY\nEmail: Karan.javau@gmail.com\nPh. no: 510-358-3595\nPROFESSIONAL SUMMARY:\nOverall 8+ years of experience in developing Web based Applications and expertise in implementing Object Oriented Programming (OOPS) with Java, J2EE.\nExperience in System Development Life Cycle (Process Engineering, Design, Development, Deployment Support and Testing) using Agile and waterfall methodologies.\nExperience in working with Java J2EE technologies, JSP, SERVLETS, STRUTS, SPRING, JMS Active MQ.\nGood Expe"
+    },
+    {
+      "name": "jagadeesh k.docx",
+      "preview": "JAGADEESH\nJagadeesh14917@gmail.com\n(872) 216-6679\nPROFESSIONAL SUMMARY:\nAround 8 years of Technical Experience in developing Java/J2EE applications\nExperience in all phases of Project & Product development life cycle that includes System Study, Analysis, Design, Development, Integration, Testing, Deployment, Maintenance, Re-Engineering, and Documentation\nWorked in developing Core Java applications and Object Oriented design with strong knowledge in Collections, Multithreading and exception handl"
+    }
+  ],
+  "results": {
+    "records": [
+      {
+        "Rank": 1,
+        "Name": "Jagadeesh K.",
+        "Similarity": 0.4229,
+        "LLM Score": 8.2,
+        "Final Score": 0.6612,
+        "Recommendation": "Strong Yes",
+        "_strengths": [
+          "Extensive experience across the full SDLC (Design, Development, Testing, Deployment) for enterprise applications.",
+          "Strong foundation in Java/J2EE backend development coupled with exposure to modern technologies like Node.js and Angular.",
+          "Proven ability to implement DevOps practices, including CI/CD pipelines using Jenkins and containerization (Docker, Kubernetes)."
+        ],
+        "_weaknesses": [
+          "The primary focus is heavily on the Java ecosystem; depth in modern JavaScript frameworks (like React) needs further validation.",
+          "Experience level (8 years) exceeds the 2-5 year target, suggesting a potential mismatch in seniority expectations."
+        ],
+        "_missing": [
+          "Deep, hands-on experience with specific modern front-end frameworks like React or Vue.js.",
+          "Specific expertise in advanced cloud architecture patterns (e.g., serverless functions) beyond basic AWS deployment."
+        ],
+        "_keywords": [
+          "Node JS",
+          "REST",
+          "MySQL",
+          "AWS"
+        ],
+        "_summary": "Highly experienced Senior Java developer with broad full-stack exposure and strong DevOps knowledge. While the experience level is higher than requested, the candidate possesses all the required technical competencies to excel in this role.",
+        "_score_breakdown": {
+          "skills_match": 9.0,
+          "experience_relevance": 8.5,
+          "achievement_quality": 7.5,
+          "education_fit": 8.0,
+          "cultural_alignment": 8.0
+        },
+        "_file_label": "jagadeesh k.docx"
+      },
+      {
+        "Rank": 2,
+        "Name": "chenna kesava.docx",
+        "Similarity": 0.5432,
+        "LLM Score": 7.0,
+        "Final Score": 0.6373,
+        "Recommendation": "Yes",
+        "_strengths": [
+          "Strong skill alignment — 12 of 17 required skills found",
+          "Experience level appears to meet the role requirements (8+ years)"
+        ],
+        "_weaknesses": [
+          "Resume lacks quantified results and measurable impact statements",
+          "Education may not fully match requirements (role expects bachelors)"
+        ],
+        "_missing": [
+          "angular",
+          "azure",
+          "ci/cd",
+          "full stack",
+          "vue"
+        ],
+        "_keywords": [
+          "aws",
+          "css",
+          "devops",
+          "html",
+          "java",
+          "javascript",
+          "mongodb",
+          "mysql"
+        ],
+        "_summary": "Automated analysis (LLM response could not be parsed). Skill match: 12/17 required skills. Overall: 7.0/10. Review recommended for final assessment.",
+        "_score_breakdown": {
+          "skills_match": 7.1,
+          "experience_relevance": 10.0,
+          "achievement_quality": 4.4,
+          "education_fit": 4.0,
+          "cultural_alignment": 7.0
+        },
+        "_file_label": "chenna kesava.docx"
+      },
+      {
+        "Rank": 3,
+        "Name": "avinash G.docx",
+        "Similarity": 0.4446,
+        "LLM Score": 7.6,
+        "Final Score": 0.6339,
+        "Recommendation": "Yes",
+        "_strengths": [
+          "Experience level appears to meet the role requirements (8+ years)",
+          "Education background aligns with role requirements"
+        ],
+        "_weaknesses": [
+          "Partial skill match — 11 of 17 required skills found",
+          "Resume lacks quantified results and measurable impact statements"
+        ],
+        "_missing": [
+          "azure",
+          "ci/cd",
+          "devops",
+          "full stack",
+          "python"
+        ],
+        "_keywords": [
+          "angular",
+          "aws",
+          "css",
+          "html",
+          "java",
+          "javascript",
+          "mongodb",
+          "mysql"
+        ],
+        "_summary": "Automated analysis (LLM response could not be parsed). Skill match: 11/17 required skills. Overall: 7.6/10. Review recommended for final assessment.",
+        "_score_breakdown": {
+          "skills_match": 6.5,
+          "experience_relevance": 10.0,
+          "achievement_quality": 5.6,
+          "education_fit": 10.0,
+          "cultural_alignment": 7.0
+        },
+        "_file_label": "avinash G.docx"
+      },
+      {
+        "Rank": 4,
+        "Name": "Harish S.",
+        "Similarity": 0.3379,
+        "LLM Score": 8.0,
+        "Final Score": 0.6152,
+        "Recommendation": "Strong Yes",
+        "_strengths": [
+          "Extensive experience in enterprise Java/Spring ecosystem and Microservices architecture.",
+          "Proven full-stack capability covering front-end (AngularJS) and back-end development with REST APIs.",
+          "Strong exposure to DevOps practices (Docker, Jenkins) and Agile methodologies."
+        ],
+        "_weaknesses": [
+          "Primary backend focus is Java/Spring rather than the preferred Node.js or Python stack mentioned in the JD.",
+          "While database experience is broad (MySQL, Mongo, PostgreSQL), specific deep expertise in a single required DB technology might need verification.",
+          "Explicit, deep experience with AWS/Azure cloud platforms is not highlighted."
+        ],
+        "_missing": [
+          "Node.js",
+          "AWS/Azure Cloud Services",
+          "Advanced CI/CD Pipeline Implementation (e.g., advanced Kubernetes)"
+        ],
+        "_keywords": [
+          "JavaScript",
+          "Angular",
+          "Node.js (implied via REST API work)",
+          "RESTful APIs",
+          "MySQL",
+          "MongoDB",
+          "Git",
+          "Agile"
+        ],
+        "_summary": "Highly experienced Full Stack developer with deep expertise in Java/Spring and modern frontend frameworks. The candidate possesses the necessary full-stack breadth, though further probing is needed regarding specific Node.js proficiency and cloud experience.",
+        "_score_breakdown": {
+          "skills_match": 8.5,
+          "experience_relevance": 8.0,
+          "achievement_quality": 7.5,
+          "education_fit": 7.0,
+          "cultural_alignment": 7.5
+        },
+        "_file_label": "harish S.docx"
+      },
+      {
+        "Rank": 5,
+        "Name": "indrakaran soma.docx",
+        "Similarity": 0.4634,
+        "LLM Score": 6.8,
+        "Final Score": 0.5934,
+        "Recommendation": "Yes",
+        "_strengths": [
+          "Experience level appears to meet the role requirements (8+ years)",
+          "Education background aligns with role requirements"
+        ],
+        "_weaknesses": [
+          "Partial skill match — 10 of 17 required skills found",
+          "Resume lacks quantified results and measurable impact statements"
+        ],
+        "_missing": [
+          "azure",
+          "ci/cd",
+          "devops",
+          "full stack",
+          "python"
+        ],
+        "_keywords": [
+          "angular",
+          "aws",
+          "css",
+          "html",
+          "java",
+          "javascript",
+          "mongodb",
+          "mysql"
+        ],
+        "_summary": "Automated analysis (LLM response could not be parsed). Skill match: 10/17 required skills. Overall: 6.8/10. Review recommended for final assessment.",
+        "_score_breakdown": {
+          "skills_match": 5.9,
+          "experience_relevance": 10.0,
+          "achievement_quality": 3.2,
+          "education_fit": 10.0,
+          "cultural_alignment": 6.0
+        },
+        "_file_label": "indrakaran soma.docx"
+      }
+    ]
+  }
+}
