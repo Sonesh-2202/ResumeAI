@@ -6,7 +6,7 @@ All prompts enforce JSON-only responses with explicit schemas.
 import json
 from typing import Any, Optional
 
-MAX_RESUME_CHARS = 3000
+MAX_RESUME_CHARS = 5000
 MAX_JD_CHARS = 12000
 
 
@@ -31,9 +31,10 @@ def system_json_only(role: str) -> str:
         System prompt string.
     """
     return (
-        f"You are an expert {role}. You must respond ONLY with valid JSON. "
-        "No markdown code blocks, no explanation, no preamble. "
-        "Start your response with { and end with }."
+        f"You are an expert {role}. "
+        "Respond with ONLY a single raw JSON object. "
+        "No markdown, no code fences, no explanation. "
+        "Start with {{ and end with }}."
     )
 
 
@@ -55,66 +56,58 @@ def hr_scoring_user_prompt(
     """
     jd, jd_trunc = _truncate(job_description, MAX_JD_CHARS)
     res, res_trunc = _truncate(resume_text, MAX_RESUME_CHARS)
-    note_parts = []
-    if jd_trunc:
-        note_parts.append("Job description was truncated to the first 12000 characters.")
-    if res_trunc:
-        note_parts.append("Resume was truncated to the first 3000 characters.")
-    notes = " ".join(note_parts)
+    notes = ""
+    if jd_trunc or res_trunc:
+        notes = "(Note: some text was truncated for length.)"
 
-    schema = {
-        "candidate_name": "string",
-        "overall_score": "float between 0 and 10",
+    example = json.dumps({
+        "candidate_name": "Jane Smith",
+        "overall_score": 7.2,
         "score_breakdown": {
-            "skills_match": "float between 0 and 10",
-            "experience_relevance": "float between 0 and 10",
-            "achievement_quality": "float between 0 and 10",
-            "education_fit": "float between 0 and 10",
-            "cultural_alignment": "float between 0 and 10",
+            "skills_match": 8.0,
+            "experience_relevance": 7.0,
+            "achievement_quality": 6.5,
+            "education_fit": 7.0,
+            "cultural_alignment": 7.5,
         },
-        "strengths": ["string"],
-        "gaps": ["string"],
-        "missing_skills": ["string"],
-        "keyword_matches": ["string"],
-        "recommendation": "Strong Yes | Yes | Maybe | No",
-        "summary": "2-3 sentence explanation",
-    }
+        "strengths": ["Strong Python and ML experience", "Led cross-functional projects"],
+        "gaps": ["No cloud infrastructure experience", "Limited team leadership examples"],
+        "missing_skills": ["Kubernetes", "Terraform"],
+        "keyword_matches": ["Python", "machine learning", "REST APIs", "SQL"],
+        "recommendation": "Yes",
+        "summary": "Solid technical candidate with relevant ML background. Lacks cloud-native experience the role emphasizes.",
+    }, indent=2)
 
-    return f"""You are evaluating one candidate resume against one job description.
+    return f"""Evaluate this candidate for the role described below.
 
-Candidate label (use as candidate_name if the resume does not state a clear name): {candidate_label}
+STEP 1 — Understand the role: Read the job description carefully. Identify what skills, experience level, responsibilities, and qualifications the employer is looking for.
 
-Weighted rubric:
-- Skills match: 30%
-- Experience relevance and seniority: 25%
-- Achievement quality and quantified impact: 20%
-- Education fit: 10%
-- Cultural/role alignment: 15%
+STEP 2 — Evaluate the resume: Read the candidate's resume. Assess how well their actual experience, projects, skills, and education align with what the role demands. Consider depth of experience, not just keyword presence.
 
-Scoring rules:
-- Give a separate 0-10 score for every rubric dimension.
-- Use only evidence explicitly supported by the resume or job description.
-- Prefer quantified achievements and role-specific keywords when scoring highly.
-- If the resume lacks evidence for a dimension, score it conservatively.
-- Recommendation must be one of: "Strong Yes", "Yes", "Maybe", "No".
+STEP 3 — Score and recommend.
 
-Job description:
----
+JOB DESCRIPTION:
 {jd}
----
 
-Resume:
----
+CANDIDATE RESUME ({candidate_label}):
 {res}
----
+
 {notes}
 
-Respond ONLY with JSON, starting with {{ and ending with }}.
-Do not include markdown, code fences, or any text outside the JSON object.
+Score on these 5 dimensions (0-10 each):
+- skills_match (30%): Does the candidate have the required technical and soft skills? Consider depth, not just mentions.
+- experience_relevance (25%): Is their work experience directly applicable to this role's level and domain?
+- achievement_quality (20%): Do they show measurable impact — numbers, outcomes, scale?
+- education_fit (10%): Does their education match what's asked?
+- cultural_alignment (15%): Based on tone and context, would they fit the team/company?
 
-Exact JSON schema (types and keys required):
-{json.dumps(schema, indent=2)}
-"""
+overall_score = weighted average of the 5 dimensions.
+recommendation: "Strong Yes" (8+), "Yes" (6.5-8), "Maybe" (4.5-6.5), "No" (<4.5).
+
+Provide 2-3 strengths, 2-3 gaps, 2-3 missing_skills from JD not in resume, 3-5 keyword_matches found in both, and a 2-sentence summary.
+
+Output ONLY this JSON format:
+{example}"""
 
 
 def hr_scoring_retry_user_prompt(
@@ -135,14 +128,21 @@ def hr_scoring_retry_user_prompt(
     Returns:
         User message for retry.
     """
-    prev, _ = _truncate(previous_raw_response, 2000)
-    base = hr_scoring_user_prompt(job_description, resume_text, candidate_label)
-    return (
-        base
-        + "\n\nYour previous answer was invalid JSON. Output again as a single JSON object only.\n"
-        f"Invalid prior output (for reference, do not repeat): {prev}\n"
-        "Remember: respond ONLY with JSON starting with { — no markdown."
-    )
+    prev, _ = _truncate(previous_raw_response, 400)
+    jd, _ = _truncate(job_description, MAX_JD_CHARS)
+    res, _ = _truncate(resume_text, MAX_RESUME_CHARS)
+
+    return f"""Your previous response was invalid JSON. Try again.
+
+JOB DESCRIPTION:
+{jd}
+
+CANDIDATE RESUME ({candidate_label}):
+{res}
+
+Output ONLY a JSON object with these keys: candidate_name, overall_score (0-10), score_breakdown (skills_match, experience_relevance, achievement_quality, education_fit, cultural_alignment), strengths (list), gaps (list), missing_skills (list), keyword_matches (list), recommendation ("Strong Yes"/"Yes"/"Maybe"/"No"), summary (string).
+
+Start with {{ and end with }}. No markdown. No explanation. Just JSON."""
 
 
 def jd_analysis_user_prompt(combined_jd_text: str) -> str:

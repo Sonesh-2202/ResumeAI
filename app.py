@@ -217,6 +217,36 @@ def _style_by_recommendation(df: pd.DataFrame, dark: bool = False) -> Any:
     return df.style.apply(row_colors, axis=1)
 
 
+def _reconcile_recommendation(llm_rec: str, final_score: float) -> str:
+    """
+    Override the LLM recommendation if it contradicts the computed final score.
+    This ensures the leaderboard is consistent: scores and labels agree.
+
+    Thresholds (final_score is 0-1 scale):
+      >= 0.80: Strong Yes
+      >= 0.65: Yes
+      >= 0.45: Maybe
+      <  0.45: No
+    """
+    if final_score >= 0.80:
+        score_rec = "Strong Yes"
+    elif final_score >= 0.65:
+        score_rec = "Yes"
+    elif final_score >= 0.45:
+        score_rec = "Maybe"
+    else:
+        score_rec = "No"
+
+    # If the LLM and score agree on the tier, keep the LLM wording.
+    order = {"No": 0, "Maybe": 1, "Yes": 2, "Strong Yes": 3}
+    llm_rank = order.get(llm_rec, 1)
+    score_rank = order.get(score_rec, 1)
+    # Allow ±1 tier difference; override if more than that.
+    if abs(llm_rank - score_rank) <= 1:
+        return llm_rec
+    return score_rec
+
+
 def _jd_quality_warning(job_description: str) -> None:
     """Show a warning if the job description looks too thin for reliable scoring."""
     text = (job_description or "").strip()
@@ -440,6 +470,19 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                     progress = st.progress(0.0, text="Stage 2: LLM analysis…")
                     for i, (label, resume_body) in enumerate(resume_entries):
                         status.write(f"Scoring {label} ({i + 1}/{n})")
+                        candidate_progress = st.progress(0.12, text=f"Waiting on LM Studio: {label}")
+                        candidate_progress_state = {"last": 0}
+
+                        def _on_chunk(raw: str, current_label: str = label) -> None:
+                            current_len = len(raw or "")
+                            if current_len - candidate_progress_state["last"] < 120:
+                                return
+                            candidate_progress_state["last"] = current_len
+                            candidate_progress.progress(
+                                min(0.9, 0.12 + (current_len / 1800.0)),
+                                text=f"Receiving {current_label} response… {current_len} chars",
+                            )
+
                         llm_results.append(
                             score_candidate_resume(
                                 client,
@@ -448,8 +491,10 @@ def render_hr_mode(client: Any, model_id: str, dark: bool) -> None:
                                 resume_body,
                                 label,
                                 stream=True,
+                                on_chunk=_on_chunk,
                             )
                         )
+                        candidate_progress.progress(1.0, text=f"Completed {label}")
                         progress.progress((i + 1) / n, text=f"Stage 2: analyzed {i + 1}/{n}")
                     progress.empty()
                     status.update(label="Screening complete", state="complete", expanded=False)
@@ -943,6 +988,19 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
                         sims = similarity_scores_batched(embedder, jd_for_sim, [plain])
                         emb = sims[0] if sims else 0.0
                         status.write("Running the weighted recruiter rubric.")
+                        sim_progress = st.progress(0.15, text="Waiting on LM Studio for simulation…")
+                        sim_progress_state = {"last": 0}
+
+                        def _sim_on_chunk(raw: str) -> None:
+                            current_len = len(raw or "")
+                            if current_len - sim_progress_state["last"] < 120:
+                                return
+                            sim_progress_state["last"] = current_len
+                            sim_progress.progress(
+                                min(0.9, 0.15 + (current_len / 1800.0)),
+                                text=f"Receiving simulation response… {current_len} chars",
+                            )
+
                         lr = score_candidate_resume(
                             client,
                             model_id,
@@ -950,6 +1008,7 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
                             plain,
                             st.session_state.get("last_user_name", "You"),
                             stream=True,
+                            on_chunk=_sim_on_chunk,
                         )
                         llm_score = float(lr.get("llm_score", 0.0))
                         final = (emb * 0.4) + (llm_score / 10.0 * 0.6)
@@ -958,6 +1017,7 @@ def render_candidate_mode(client: Any, model_id: str, dark: bool) -> None:
                             "emb": emb,
                             "final": final,
                         }
+                        sim_progress.progress(1.0, text="Simulation complete")
                         status.update(label="Simulation complete", state="complete", expanded=False)
                     try:
                         append_entry(
