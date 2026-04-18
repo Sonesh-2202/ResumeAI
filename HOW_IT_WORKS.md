@@ -1,10 +1,10 @@
-# How Resona works
+# How TalentMatch Works
 
 This document describes architecture, data flow, and execution. Install and run commands are in [README.md](README.md).
 
-## What Resona is
+## What TalentMatch Is
 
-Resona is a **local-only** pipeline:
+TalentMatch is a **local-only** pipeline:
 
 1. **Ingestion** — PDFs → plain text (PyMuPDF).
 2. **Similarity** — JDs and résumés embedded with `sentence-transformers` (`all-MiniLM-L6-v2`); cosine similarity measures match strength.

@@ -1057,12 +1057,12 @@ def render_activity_log_sidebar() -> None:
         "Recent runs (newest first)",
         options=list(range(len(rev))),
         format_func=_fmt,
-        key="resona_history_pick",
+        key="talentmatch_history_pick",
     )
     if pick is not None and 0 <= pick < len(rev):
         ent = rev[pick]
         st.caption(ent.get("summary", ""))
-        if st.button("Restore selected", key="resona_history_restore", use_container_width=True):
+        if st.button("Restore selected", key="talentmatch_history_restore", use_container_width=True):
             kind = ent.get("kind", "")
             payload = ent.get("payload") or {}
             if kind == "hr_screening" and payload.get("records"):
@@ -1078,7 +1078,7 @@ def render_activity_log_sidebar() -> None:
             elif kind == "resume_generated":
                 st.info("Resume snapshots are kept in-session only — re-generate from your profile.")
             st.rerun()
-    if st.button("Erase activity log file", key="resona_history_wipe"):
+    if st.button("Erase activity log file", key="talentmatch_history_wipe"):
         clear_all()
         st.rerun()
 
@@ -1086,7 +1086,7 @@ def render_activity_log_sidebar() -> None:
 def main() -> None:
     """Streamlit app entry."""
     st.set_page_config(
-        page_title="Resona",
+        page_title="TalentMatch",
         page_icon="◈",
         layout="wide",
     )
@@ -1098,8 +1098,8 @@ def main() -> None:
 
     with st.sidebar:
         render_sidebar_brand(
-            "Resona",
-            "Local-first hiring intelligence — LM Studio, embeddings, zero cloud LLM spend.",
+            "TalentMatch",
+            "AI resume screening & candidate matching. 100% local. Zero cloud costs.",
         )
         active_theme = render_theme_toggle()
         st.divider()

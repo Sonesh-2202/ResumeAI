@@ -1,19 +1,30 @@
 <div align="center">
-  <img src="assets/logo.png" alt="Resona Logo" width="200">
-  <h1>Resona</h1>
-  <p><strong>100% Local AI Hiring Assistant & Resume Generator</strong></p>
+  <h1>🎯 TalentMatch</h1>
+  <p><strong>⚡ Local-First AI Resume Screening & Candidate Matching</strong></p>
+  <p><em>100% privacy-first. Zero cloud LLM costs. Screen 5 resumes in 3 minutes.</em></p>
 
   [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
   [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=Streamlit&logoColor=white)](https://streamlit.io/)
-  [![LM Studio](https://img.shields.io/badge/LM%20Studio-Local%20LLM-green)](https://lmstudio.ai/)
+  [![LM Studio](https://img.shields.io/badge/LM%20Studio-Local%20Inference-green)](https://lmstudio.ai/)
+  [![SentenceTransformers](https://img.shields.io/badge/Semantic-Embeddings-purple)](https://www.sbert.net/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 </div>
 
 ---
 
-**Resona** is a privacy-first hiring tool that finds the *resonance* between job descriptions and resumes using local embedding similarity and your own LLM (via LM Studio). Whether you're an HR professional screening hundreds of candidates or a job seeker tailoring your profile for multiple roles, Resona keeps your data entirely on your machine.
+**TalentMatch** is a privacy-first hiring intelligence tool that matches job descriptions to resumes using local embedding similarity + your own LLM (via LM Studio). Whether you're an HR professional screening hundreds of candidates or a job seeker tailoring your profile for multiple roles, TalentMatch keeps your data entirely on your machine.
 
 No API keys, no cloud inference, no data leaks.
+
+### ⚡ Why TalentMatch?
+
+| Challenge | TalentMatch Solution |
+|-----------|----------------------|
+| 💰 **Cloud LLM bills** | Run completely local — zero API costs |
+| 🔒 **Data privacy** | Resumes never leave your machine |
+| ⏱️ **Speed** | Screen 5 candidates in ~3 minutes |
+| 🎯 **Accuracy** | Dual-stage scoring: embeddings + LLM rubric |
+| 🤖 **Simplicity** | Beautiful Streamlit UI, zero DevOps needed |
 
 ## 🚀 Key Features
 
@@ -77,7 +88,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Run Resona
+### 3. Run TalentMatch
 
 ```bash
 streamlit run app.py
@@ -90,7 +101,7 @@ Open your browser to `http://localhost:8501`.
 ## 📂 Project Structure
 
 ```text
-resona/
+talentmatch/
 ├── app.py                # Main Streamlit Orchestrator
 ├── ingestion/           # PDF to Text Parsing
 ├── scoring/             # Embedding Similarity & LLM Scoring
